@@ -13,15 +13,15 @@ import java.util.List;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
-import com.bytezone.common.Utility;
 import com.bytezone.diskbrowser.applefile.AppleFileSource;
 import com.bytezone.diskbrowser.nib.NibFile;
 import com.bytezone.diskbrowser.nib.V2dFile;
 import com.bytezone.diskbrowser.nib.WozFile;
 import com.bytezone.diskbrowser.utilities.FileFormatException;
-import com.bytezone.diskbrowser.utilities.HexFormatter;
 
+// -----------------------------------------------------------------------------------//
 public class AppleDisk implements Disk
+// -----------------------------------------------------------------------------------//
 {
   private static final int MAX_INTERLEAVE = 3;
   private static final int SECTOR_SIZE = 256;
@@ -31,7 +31,7 @@ public class AppleDisk implements Disk
   private final byte[] diskBuffer;        // contains the disk contents in memory
 
   private final int tracks;               // usually 35 for floppy disks
-  private int sectors;                    // 8 or 16
+  private int sectors;                    // 8 or 16 (or 32 for unidos)
   private int blocks;                     // 280 or 560 for floppy disks, higher for HD
 
   private final int trackSize;            // 4096
@@ -39,7 +39,8 @@ public class AppleDisk implements Disk
 
   private int interleave = 0;
   private static int[][] interleaveSector = //
-      { { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },       // None
+      { { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+          22, 23, 24, 25, 26, 27, 28, 29, 30, 31 },                     // None
         { 0, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 15 },       // Prodos/Pascal
         { 0, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 15 },       // Infocom
         { 0, 6, 12, 3, 9, 15, 14, 5, 11, 2, 8, 7, 13, 4, 10, 1 } };     // CPM
@@ -81,64 +82,50 @@ public class AppleDisk implements Disk
   private ActionListener actionListenerList;
   private List<DiskAddress> blockList;
 
+  private WozFile wozFile;
+
   private final boolean debug = false;
 
+  // ---------------------------------------------------------------------------------//
   public AppleDisk (File file, int tracks, int sectors) throws FileFormatException
+  // ---------------------------------------------------------------------------------//
+  {
+    this (file, tracks, sectors, 0);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public AppleDisk (File file, int tracks, int sectors, int skip)
+      throws FileFormatException
+  // ---------------------------------------------------------------------------------//
   {
     assert (file.exists ()) : "No such path :" + file.getAbsolutePath ();
     assert (!file.isDirectory ()) : "File is directory :" + file.getAbsolutePath ();
     assert (file.length () <= Integer.MAX_VALUE) : "File too large";
     assert (file.length () != 0) : "File empty";
 
-    String name = file.getName ();
-    int pos = name.lastIndexOf ('.');
+    String fileName = file.getName ();
 
-    String suffix = pos > 0 ? name.substring (pos + 1) : "";
+    int pos = fileName.lastIndexOf ('.');
+    String suffix = pos > 0 ? fileName.substring (pos + 1) : "";
 
     byte[] buffer = getPrefix (file);         // HDV could be a 2mg
     String prefix = new String (buffer, 0, 4);
-    int skip = 0;
 
-    if (suffix.equalsIgnoreCase ("2mg") || "2IMG".equals (prefix))
+    if ("2mg".equalsIgnoreCase (suffix) || "2IMG".equals (prefix))
     {
-      if (debug)
-        System.out.println (Utility.toHex (buffer));
-
-      // http://apple2.org.za/gswv/a2zine/Docs/DiskImage_2MG_Info.txt
+      //      System.out.println ("checking 2mg");
       if ("2IMG".equals (prefix))
       {
+        Prefix2mg prefix2mg = new Prefix2mg (buffer);
         if (debug)
-        {
-          String creator = new String (buffer, 4, 4);
-          System.out.printf ("Prefix    : %s%n", prefix);
-          System.out.printf ("Creator   : %s%n", creator);
-          int headerSize = Utility.getWord (buffer, 8);
-          System.out.printf ("Header    : %d%n", headerSize);
-          int version = Utility.getWord (buffer, 10);
-          System.out.printf ("Version   : %d%n", version);
-          System.out.printf ("Format    : %02X%n", buffer[12]);
-        }
+          System.out.println (prefix2mg);
 
-        int diskData = Utility.getLong (buffer, 28);
-        blocks = HexFormatter.intValue (buffer[20], buffer[21]);       // 1600
-
-        if (debug)
-        {
-          System.out.printf ("Data size : %08X (%,d)%n", diskData, diskData);
-          System.out.printf ("Blocks    : %,d%n", blocks);
-        }
-
-        if (diskData > 0)
-          this.blocks = diskData / 4096 * 8;    // reduce blocks to a multiple of 8
-
-        // see /Asimov disks/images/gs/os/prodos16/ProDOS 16v1_3.2mg
-
-        if (debug)
-          System.out.printf ("Blocks    : %,d%n", blocks);
+        if (prefix2mg.diskData > 0)
+          this.blocks = prefix2mg.diskData / 4096 * 8;    // reduce blocks to a multiple of 8
 
         this.sectorSize = 512;
         this.trackSize = 8 * sectorSize;
-        skip = Utility.getWord (buffer, 8);
+        skip = prefix2mg.headerSize;
 
         tracks = blocks / 8;          // change parameter!
         sectors = 8;                  // change parameter!
@@ -153,26 +140,43 @@ public class AppleDisk implements Disk
         this.trackSize = sectors * sectorSize;
       }
     }
-    else if (suffix.equalsIgnoreCase ("HDV"))
+    else if ("img".equals (suffix) || "dimg".equals (suffix))
     {
-      this.blocks = (int) file.length () / 4096 * 8; // reduce blocks to a multiple of 8
+      PrefixDiskCopy prefixDiskCopy = new PrefixDiskCopy (buffer);
+
+      blocks = prefixDiskCopy.getBlocks ();
       this.sectorSize = 512;
+      this.trackSize = 8 * sectorSize;
+      skip = 0x54;
+
+      tracks = blocks / 8;          // change parameter!
+      sectors = 8;                  // change parameter!
+    }
+    else if (suffix.equalsIgnoreCase ("HDV")
+        || (suffix.equalsIgnoreCase ("po") && tracks > 50)) // ULTIMATE APPLE1 CFFA 3.5.po
+    {
+      //this.blocks = (int) file.length () / 4096 * 8; // reduce blocks to a multiple of 8
+      this.blocks = tracks * sectors;
+      this.sectorSize = 512;
+      this.trackSize = sectors * sectorSize;
+    }
+    else if (file.length () == 143360 && tracks == 256 && sectors == 8)    // wiz4
+    {
+      this.blocks = tracks * sectors;
+      this.sectorSize = 512;
+      this.trackSize = sectors * sectorSize;
+    }
+    else if (file.length () == 819200 && tracks == 50 && sectors == 32)    // unidisk
+    {
+      this.blocks = tracks * sectors;
+      this.sectorSize = 256;
       this.trackSize = sectors * sectorSize;
     }
     else
     {
-      if (file.length () == 143360 && tracks == 256 && sectors == 8)    // wiz4
-      {
-        this.blocks = tracks * sectors;
-        this.sectorSize = 512;
-        this.trackSize = sectors * sectorSize;
-      }
-      else
-      {
-        this.blocks = tracks * sectors;
-        this.sectorSize = (int) file.length () / blocks;
-        this.trackSize = sectors * sectorSize;
-      }
+      this.blocks = tracks * sectors;
+      this.sectorSize = (int) file.length () / blocks;
+      this.trackSize = sectors * sectorSize;
     }
 
     if (sectorSize != 256 && sectorSize != 512)
@@ -192,6 +196,7 @@ public class AppleDisk implements Disk
     }
 
     diskBuffer = new byte[blocks * sectorSize];
+
     hasData = new boolean[blocks];
 
     if (debug)
@@ -200,13 +205,12 @@ public class AppleDisk implements Disk
       System.out.printf ("Skip size       : %,d%n", skip);
     }
 
-    try
+    try (BufferedInputStream in = new BufferedInputStream (new FileInputStream (file)))
     {
-      BufferedInputStream in = new BufferedInputStream (new FileInputStream (file));
+
       if (skip > 0)
         in.skip (skip);
       in.read (diskBuffer);
-      in.close ();
     }
     catch (IOException e)
     {
@@ -217,7 +221,20 @@ public class AppleDisk implements Disk
     checkSectorsForData ();
   }
 
+  // ---------------------------------------------------------------------------------//
+  void switchToDos ()
+  // ---------------------------------------------------------------------------------//
+  {
+    sectorSize = 256;
+    sectors = 16;
+    blocks = 560;
+    hasData = new boolean[blocks];
+    checkSectorsForData ();
+  }
+
+  // ---------------------------------------------------------------------------------//
   public AppleDisk (V2dFile disk, int tracks, int sectors)
+  // ---------------------------------------------------------------------------------//
   {
     this.tracks = tracks;
     this.sectors = sectors;
@@ -232,7 +249,9 @@ public class AppleDisk implements Disk
     checkSectorsForData ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public AppleDisk (NibFile disk)       // not used yet
+  // ---------------------------------------------------------------------------------//
   {
     tracks = 35;
     trackSize = 4096;
@@ -240,8 +259,11 @@ public class AppleDisk implements Disk
     diskBuffer = disk.getDiskBuffer ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public AppleDisk (WozFile wozFile, int tracks, int sectors)
+  // ---------------------------------------------------------------------------------//
   {
+    this.wozFile = wozFile;
     this.tracks = tracks;
     this.sectors = sectors;
     file = wozFile.file;
@@ -264,14 +286,14 @@ public class AppleDisk implements Disk
     checkSectorsForData ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private byte[] getPrefix (File path)
+  // ---------------------------------------------------------------------------------//
   {
-    byte[] buffer = new byte[64];
-    try
+    byte[] buffer = new byte[0x54];
+    try (BufferedInputStream file = new BufferedInputStream (new FileInputStream (path)))
     {
-      BufferedInputStream file = new BufferedInputStream (new FileInputStream (path));
       file.read (buffer);
-      file.close ();
     }
     catch (IOException e)
     {
@@ -282,51 +304,32 @@ public class AppleDisk implements Disk
     return buffer;
   }
 
+  // ---------------------------------------------------------------------------------//
   private void checkSectorsForData ()
-  {
-    if (true)
-    {
-      checkSectorsFaster ();
-      return;
-    }
-    // force blockList to be rebuilt with the correct number/size of blocks
-    blockList = null;
-
-    for (DiskAddress da : this)         // uses blockList.iterator
-    {
-      byte[] buffer = readSector (da);
-      hasData[da.getBlock ()] = false;
-      for (int i = 0; i < sectorSize; i++)
-        if (buffer[i] != emptyByte)
-        {
-          hasData[da.getBlock ()] = true;
-          break;
-        }
-    }
-  }
-
-  private void checkSectorsFaster ()
+  // ---------------------------------------------------------------------------------//
   {
     // force blockList to be rebuilt with the correct number/size of blocks
     blockList = null;
 
-    for (DiskAddress da : this)         // uses blockList.iterator
+    for (DiskAddress da : this)
     {
-      if (sectorSize == SECTOR_SIZE)
+      if (sectorSize == SECTOR_SIZE)                    // 256 byte sectors
       {
         int diskOffset = getBufferOffset (da);
-        hasData[da.getBlock ()] = check (diskOffset);
+        hasData[da.getBlockNo ()] = check (diskOffset);
       }
-      else
+      else                                              // 512 byte blocks
       {
         int diskOffset1 = getBufferOffset (da, 0);
         int diskOffset2 = getBufferOffset (da, 1);
-        hasData[da.getBlock ()] = check (diskOffset1) || check (diskOffset2);
+        hasData[da.getBlockNo ()] = check (diskOffset1) || check (diskOffset2);
       }
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private boolean check (int diskOffset)
+  // ---------------------------------------------------------------------------------//
   {
     for (int i = diskOffset, max = diskOffset + SECTOR_SIZE; i < max; i++)
       if (diskBuffer[i] != emptyByte)
@@ -338,103 +341,136 @@ public class AppleDisk implements Disk
    * Routines that implement the Disk interface
    */
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public int getSectorsPerTrack ()
+  public int getBlocksPerTrack ()
+  // ---------------------------------------------------------------------------------//
   {
     return trackSize / sectorSize;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int getTrackSize ()
+  // ---------------------------------------------------------------------------------//
   {
     return trackSize;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int getBlockSize ()
+  // ---------------------------------------------------------------------------------//
   {
     return sectorSize;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int getTotalBlocks ()
+  // ---------------------------------------------------------------------------------//
   {
     return blocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int getTotalTracks ()
+  // ---------------------------------------------------------------------------------//
   {
     return tracks;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public boolean isSectorEmpty (DiskAddress da)
+  public boolean isBlockEmpty (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
-    return !hasData[da.getBlock ()];
+    return !hasData[da.getBlockNo ()];
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public boolean isSectorEmpty (int block)
+  public boolean isBlockEmpty (int block)
+  // ---------------------------------------------------------------------------------//
   {
     return !hasData[block];
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public boolean isSectorEmpty (int track, int sector)
+  public boolean isBlockEmpty (int track, int sector)
+  // ---------------------------------------------------------------------------------//
   {
-    return !hasData[getDiskAddress (track, sector).getBlock ()];
+    return !hasData[getDiskAddress (track, sector).getBlockNo ()];
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public File getFile ()
+  // ---------------------------------------------------------------------------------//
   {
     return file;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public byte[] readSector (DiskAddress da)
+  public byte[] readBlock (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
     byte[] buffer = new byte[sectorSize];
-    readBuffer (da, buffer, 0);
+    if (da == null)
+      System.out.println ("Disk address is null");
+    else
+      readBuffer (da, buffer, 0);
     return buffer;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public byte[] readSectors (List<DiskAddress> daList)
+  public byte[] readBlocks (List<DiskAddress> daList)
+  // ---------------------------------------------------------------------------------//
   {
     byte[] buffer = new byte[daList.size () * sectorSize];
     int ptr = 0;
     for (DiskAddress da : daList)
     {
       // sparse text/PNT/PIC files may have gaps
-      if (da != null && (da.getBlock () > 0 || ((AppleDiskAddress) da).zeroFlag ()))
+      if (da != null && (da.getBlockNo () > 0 || ((AppleDiskAddress) da).zeroFlag ()))
         readBuffer (da, buffer, ptr);
       ptr += sectorSize;
     }
     return buffer;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public byte[] readSector (int track, int sector)
+  public byte[] readBlock (int track, int sector)
+  // ---------------------------------------------------------------------------------//
   {
-    return readSector (getDiskAddress (track, sector));
+    return readBlock (getDiskAddress (track, sector));
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public byte[] readSector (int block)
+  public byte[] readBlock (int block)
+  // ---------------------------------------------------------------------------------//
   {
-    return readSector (getDiskAddress (block));
+    return readBlock (getDiskAddress (block));
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public void writeSector (DiskAddress da, byte[] buffer)
+  public void writeBlock (DiskAddress da, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     writeBuffer (da, buffer);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void setInterleave (int interleave)
+  // ---------------------------------------------------------------------------------//
   {
     assert (interleave >= 0 && interleave <= MAX_INTERLEAVE) : "Invalid interleave";
     this.interleave = interleave;
@@ -443,14 +479,18 @@ public class AppleDisk implements Disk
       notifyListeners ("Interleave changed");
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int getInterleave ()
+  // ---------------------------------------------------------------------------------//
   {
     return interleave;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void setBlockSize (int size)
+  // ---------------------------------------------------------------------------------//
   {
     assert (size == SECTOR_SIZE || size == BLOCK_SIZE) : "Invalid sector size : " + size;
     if (sectorSize == size)
@@ -467,12 +507,11 @@ public class AppleDisk implements Disk
       notifyListeners ("Sector size changed");
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DiskAddress getDiskAddress (int track, int sector)
+  // ---------------------------------------------------------------------------------//
   {
-    //    track &= 0x3F;
-    //    sector &= 0x1F;
-
     if (!isValidAddress (track, sector))
     {
       System.out.println ("Invalid block : " + track + "/" + sector);
@@ -482,8 +521,10 @@ public class AppleDisk implements Disk
     return new AppleDiskAddress (this, track, sector);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DiskAddress getDiskAddress (int block)
+  // ---------------------------------------------------------------------------------//
   {
     if (!isValidAddress (block))
     {
@@ -495,10 +536,12 @@ public class AppleDisk implements Disk
     return new AppleDiskAddress (this, block);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getDiskAddressList (int... blocks)
+  // ---------------------------------------------------------------------------------//
   {
-    List<DiskAddress> addressList = new ArrayList<DiskAddress> ();
+    List<DiskAddress> addressList = new ArrayList<> ();
 
     for (int block : blocks)
     {
@@ -508,14 +551,18 @@ public class AppleDisk implements Disk
     return addressList;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public boolean isValidAddress (int block)
+  // ---------------------------------------------------------------------------------//
   {
     return block >= 0 && block < this.blocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public boolean isValidAddress (int track, int sector)
+  // ---------------------------------------------------------------------------------//
   {
     track &= 0x3F;
     sector &= 0x1F;
@@ -528,17 +575,19 @@ public class AppleDisk implements Disk
     return true;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public boolean isValidAddress (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
-    return da != null && isValidAddress (da.getTrack (), da.getSector ());
+    return da != null && isValidAddress (da.getTrackNo (), da.getSectorNo ());
   }
 
-  /*
-   * This is the only method that transfers data from the disk buffer to an output buffer.
-   * It handles sectors of 256 or 512 bytes, and both linear and interleaved sectors.
-   */
+  // This is the only method that transfers data from the disk buffer to an output buffer.
+  // It handles sectors of 256 or 512 bytes, and both linear and interleaved sectors.
+  // ---------------------------------------------------------------------------------//
   private void readBuffer (DiskAddress da, byte[] buffer, int bufferOffset)
+  // ---------------------------------------------------------------------------------//
   {
     assert da.getDisk () == this : "Disk address not applicable to this disk";
     assert sectorSize == SECTOR_SIZE
@@ -562,7 +611,9 @@ public class AppleDisk implements Disk
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void writeBuffer (DiskAddress da, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     assert da.getDisk () == this : "Disk address not applicable to this disk";
     assert sectorSize == SECTOR_SIZE
@@ -585,48 +636,64 @@ public class AppleDisk implements Disk
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getBufferOffset (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
     assert sectorSize == SECTOR_SIZE;
-    return da.getTrack () * trackSize
-        + interleaveSector[interleave][da.getSector ()] * SECTOR_SIZE;
+
+    return da.getTrackNo () * trackSize
+        + interleaveSector[interleave][da.getSectorNo ()] * SECTOR_SIZE;
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getBufferOffset (DiskAddress da, int seq)
+  // ---------------------------------------------------------------------------------//
   {
     assert sectorSize == BLOCK_SIZE;
+
     assert seq == 0 || seq == 1;
 
-    return da.getTrack () * trackSize
-        + interleaveSector[interleave][da.getSector () * 2 + seq] * SECTOR_SIZE;
+    return da.getTrackNo () * trackSize
+        + interleaveSector[interleave][da.getSectorNo () * 2 + seq] * SECTOR_SIZE;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void addActionListener (ActionListener actionListener)
+  // ---------------------------------------------------------------------------------//
   {
     actionListenerList = AWTEventMulticaster.add (actionListenerList, actionListener);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void removeActionListener (ActionListener actionListener)
+  // ---------------------------------------------------------------------------------//
   {
     actionListenerList = AWTEventMulticaster.remove (actionListenerList, actionListener);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void notifyListeners (String text)
+  // ---------------------------------------------------------------------------------//
   {
     if (actionListenerList != null)
       actionListenerList
           .actionPerformed (new ActionEvent (this, ActionEvent.ACTION_PERFORMED, text));
   }
 
+  // ---------------------------------------------------------------------------------//
   public AppleFileSource getDetails ()
+  // ---------------------------------------------------------------------------------//
   {
     return new DefaultAppleFileSource (toString (), file.getName (), null);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -635,25 +702,33 @@ public class AppleDisk implements Disk
     if (path.startsWith (home))
       path = "~" + path.substring (home.length ());
 
-    text.append (String.format ("Path............ %s%n", path));
-    text.append (String.format ("File name....... %s%n", file.getName ()));
-    text.append (String.format ("File size....... %,d%n", file.length ()));
-    text.append (String.format ("Tracks.......... %d%n", tracks));
-    text.append (String.format ("Sectors......... %d%n", sectors));
-    text.append (String.format ("Blocks.......... %,d%n", blocks));
-    text.append (String.format ("Track size...... %,d%n", trackSize));
-    text.append (String.format ("Sector size..... %d%n", sectorSize));
-    text.append (String.format ("Interleave...... %d", interleave));
+    text.append (String.format ("Path................. %s%n", path));
+    text.append (String.format ("File name............ %s%n", file.getName ()));
+    text.append (String.format ("File size............ %,d%n", file.length ()));
+    text.append (String.format ("Tracks............... %d%n", tracks));
+    text.append (String.format ("Sectors.............. %d%n", sectors));
+    text.append (String.format ("Blocks............... %,d%n", blocks));
+    text.append (String.format ("Track size........... %,d%n", trackSize));
+    text.append (String.format ("Sector size.......... %d%n", sectorSize));
+    text.append (String.format ("Interleave........... %d", interleave));
+
+    if (wozFile != null)
+    {
+      text.append ("\n\n");
+      text.append (wozFile);
+    }
 
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public Iterator<DiskAddress> iterator ()
+  // ---------------------------------------------------------------------------------//
   {
     if (blockList == null)
     {
-      blockList = new ArrayList<DiskAddress> (blocks);
+      blockList = new ArrayList<> (blocks);
       for (int block = 0; block < blocks; block++)
         blockList.add (new AppleDiskAddress (this, block));
     }
@@ -661,17 +736,21 @@ public class AppleDisk implements Disk
     return blockList.iterator ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public long getBootChecksum ()
+  // ---------------------------------------------------------------------------------//
   {
-    byte[] buffer = readSector (0, 0);
+    byte[] buffer = readBlock (0, 0);
     Checksum checksum = new CRC32 ();
     checksum.update (buffer, 0, buffer.length);
     return checksum.getValue ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void setEmptyByte (byte value)
+  // ---------------------------------------------------------------------------------//
   {
     emptyByte = value;
     checkSectorsForData ();

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
 /*-
  *  Offset     Meaning
@@ -21,14 +22,18 @@ import com.bytezone.diskbrowser.utilities.HexFormatter;
  *    S2+n     last byte = 0
  */
 
+// -----------------------------------------------------------------------------------//
 public class ShapeTable extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
-  private final List<Shape> shapes = new ArrayList<Shape> ();
+  private final List<Shape> shapes = new ArrayList<> ();
   private static final int SIZE = 400;
   int maxWidth = 0;
   int maxHeight = 0;
 
+  // ---------------------------------------------------------------------------------//
   public ShapeTable (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -42,7 +47,7 @@ public class ShapeTable extends AbstractFile
     {
       Shape shape = new Shape (buffer, i);
       if (!shape.valid)
-        return;
+        continue;                   // shape table should be abandoned
       shapes.add (shape);
 
       minRow = Math.min (minRow, shape.minRow);
@@ -81,8 +86,10 @@ public class ShapeTable extends AbstractFile
     g2d.dispose ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -100,7 +107,9 @@ public class ShapeTable extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean isShapeTable (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer.length == 0)
       return false;
@@ -122,15 +131,21 @@ public class ShapeTable extends AbstractFile
         return false;
 
       // check index points inside the file
-      int offset = HexFormatter.unsignedShort (buffer, ptr);
+      int offset = Utility.unsignedShort (buffer, ptr);
       if (offset == 0 || offset >= buffer.length)
         return false;
+
+      // check if previous shape ended with zero
+      //      if (i > 0 && buffer[offset - 1] > 0)
+      //        return false;
     }
 
     return true;
   }
 
+  // ---------------------------------------------------------------------------------//
   class Shape
+  // ---------------------------------------------------------------------------------//
   {
     private final byte[] buffer;
     private final int index;
@@ -155,7 +170,7 @@ public class ShapeTable extends AbstractFile
       int row = startRow;
       int col = startCol;
 
-      offset = HexFormatter.unsignedShort (buffer, index * 2 + 2);
+      offset = Utility.unsignedShort (buffer, index * 2 + 2);
 
       int ptr = offset;
       while (ptr < buffer.length)
@@ -247,7 +262,7 @@ public class ShapeTable extends AbstractFile
     void convertGrid (int offsetRows, int offsetColumns, int rows, int columns)
     {
       //      System.out.printf ("Converting shape # %d%n", index);
-      //      System.out.printf ("offsetRows %d offsetCols %d%n", offsetRows, 
+      //      System.out.printf ("offsetRows %d offsetCols %d%n", offsetRows,
       // offsetColumns);
       //      System.out.printf ("rows %d cols %d%n", rows, columns);
 
@@ -322,7 +337,7 @@ public class ShapeTable extends AbstractFile
 
     private List<String> split (String line)
     {
-      List<String> list = new ArrayList<String> ();
+      List<String> list = new ArrayList<> ();
       while (line.length () > 48)
       {
         list.add (line.substring (0, 47));

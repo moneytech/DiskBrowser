@@ -17,23 +17,32 @@ import javax.swing.tree.TreeNode;
 
 import com.bytezone.diskbrowser.applefile.AppleFileSource;
 import com.bytezone.diskbrowser.disk.DiskFactory;
+import com.bytezone.diskbrowser.disk.DualDosDisk;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 import com.bytezone.diskbrowser.gui.RedoHandler.RedoEvent;
 
+// -----------------------------------------------------------------------------------//
 class AppleDiskTab extends AbstractTab
+// -----------------------------------------------------------------------------------//
 {
   FormattedDisk disk;
 
+  // restoring from a file selection
+  // ---------------------------------------------------------------------------------//
   public AppleDiskTab (FormattedDisk disk, DiskAndFileSelector selector,
       RedoHandler redoHandler, Font font, FileSelectedEvent event)
+  // ---------------------------------------------------------------------------------//
   {
     super (redoHandler, selector, font);
     create (disk);
     redoHandler.fileSelected (event);
   }
 
+  // restoring from a sector selection
+  // ---------------------------------------------------------------------------------//
   public AppleDiskTab (FormattedDisk disk, DiskAndFileSelector selector,
       RedoHandler redoHandler, Font font, SectorSelectedEvent event)
+  // ---------------------------------------------------------------------------------//
   {
     super (redoHandler, selector, font);
     create (disk);
@@ -43,54 +52,67 @@ class AppleDiskTab extends AbstractTab
   // This constructor is only called when lastFileUsed is not null, but the disk
   // couldn't find the file entry. Either the file has been deleted, or it is a disk
   // with redefined files (Wizardry, Infocom etc).
+  // Or possibly a root volume folder.
+  // ---------------------------------------------------------------------------------//
   public AppleDiskTab (FormattedDisk disk, DiskAndFileSelector selector,
-      RedoHandler navMan, Font font, String lastFileUsed)
+      RedoHandler redoHandler, Font font, String lastFileUsed)
+  // ---------------------------------------------------------------------------------//
   {
-    super (navMan, selector, font);
+    super (redoHandler, selector, font);
+    //    System.out.println ("File not found: " + lastFileUsed);
     create (disk);
-    //    System.out.println ("ooh - couldn't find the previous file");
+
     DefaultMutableTreeNode node = findNode (lastFileUsed);
     if (node != null)
     {
       AppleFileSource afs = (AppleFileSource) node.getUserObject ();
       FileSelectedEvent event = new FileSelectedEvent (this, afs);
-      navMan.fileSelected (event);
+      redoHandler.fileSelected (event);
     }
   }
 
   // User is selecting a new disk from the catalog
+  // ---------------------------------------------------------------------------------//
   public AppleDiskTab (FormattedDisk disk, DiskAndFileSelector selector,
-      RedoHandler navMan, Font font)
+      RedoHandler redoHandler, Font font)
+  // ---------------------------------------------------------------------------------//
   {
-    super (navMan, selector, font);
+    super (redoHandler, selector, font);
     create (disk);
 
-    AppleFileSource afs = (AppleFileSource) findNode (2).getUserObject (); // select Catalog
+    // select Catalog
+    AppleFileSource afs = (AppleFileSource) findNode (2).getUserObject ();
     if (afs == null)
       afs = (AppleFileSource) findNode (1).getUserObject (); // select Disk
-    navMan.fileSelected (new FileSelectedEvent (this, afs));
+    redoHandler.fileSelected (new FileSelectedEvent (this, afs));
   }
 
+  // ---------------------------------------------------------------------------------//
   private void create (FormattedDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     this.disk = disk;
     setTree (disk.getCatalogTree ());
     setSelectionListener (tree);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void activate ()
+  // ---------------------------------------------------------------------------------//
   {
     //    System.out.println ("=========== Activating AppleDiskTab =============");
     eventHandler.redo = true;
     eventHandler.fireDiskSelectionEvent (disk);
     eventHandler.redo = false;
-    tree.setSelectionPath (null); // turn off any current selection to force an event
+    tree.setSelectionPath (null);   // turn off any current selection to force an event
     redoHandler.setCurrentData (redoData);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public void refresh () // called when the user gives ALT-R command
+  public void refresh ()                  // called when the user gives ALT-R command
+  // ---------------------------------------------------------------------------------//
   {
     Object o = getSelectedObject ();
     String currentFile = (o == null) ? null : ((AppleFileSource) o).getUniqueName ();
@@ -100,7 +122,9 @@ class AppleDiskTab extends AbstractTab
     selectNode (currentFile);
   }
 
+  // ---------------------------------------------------------------------------------//
   private void selectNode (String nodeName)
+  // ---------------------------------------------------------------------------------//
   {
     DefaultMutableTreeNode selectNode = null;
     if (nodeName != null)
@@ -113,30 +137,49 @@ class AppleDiskTab extends AbstractTab
       System.out.println ("First node not found");
   }
 
+  // ---------------------------------------------------------------------------------//
   void redoEvent (RedoEvent event)
+  // ---------------------------------------------------------------------------------//
   {
-    selectNode (((FileSelectedEvent) event.value).file.getUniqueName ());
+    AppleFileSource afs = ((FileSelectedEvent) event.value).appleFileSource;
+    FileSelectedEvent fileSelectedEvent = (FileSelectedEvent) event.value;
+    if (fileSelectedEvent.volumeNo >= 0)
+    {
+      DualDosDisk ddd = (DualDosDisk) afs.getFormattedDisk ().getParent ();
+      ddd.setCurrentDiskNo (fileSelectedEvent.volumeNo);
+    }
+    selectNode (fileSelectedEvent.appleFileSource.getUniqueName ());
   }
 
+  // ---------------------------------------------------------------------------------//
   private DefaultMutableTreeNode findNode (String nodeName)
+  // ---------------------------------------------------------------------------------//
   {
     DefaultMutableTreeNode rootNode = getRootNode ();
+
+    // check for multi-volume disk (only search the current branch)
+    FormattedDisk fd = ((AppleFileSource) rootNode.getUserObject ()).getFormattedDisk ();
+    if (fd instanceof DualDosDisk)
+    {
+      int volume = ((DualDosDisk) fd).getCurrentDiskNo ();
+      rootNode = (DefaultMutableTreeNode) rootNode.getChildAt (volume);
+    }
+
     Enumeration<TreeNode> children = rootNode.breadthFirstEnumeration ();
     while (children.hasMoreElements ())
     {
       DefaultMutableTreeNode node = (DefaultMutableTreeNode) children.nextElement ();
-      Object o = node.getUserObject ();
-      if (o instanceof AppleFileSource)
-      {
-        AppleFileSource afs = (AppleFileSource) node.getUserObject ();
-        if (nodeName.equals (afs.getUniqueName ()))
-          return node;
-      }
+      Object userObject = node.getUserObject ();
+      if (userObject instanceof AppleFileSource
+          && nodeName.equals (((AppleFileSource) userObject).getUniqueName ()))
+        return node;
     }
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   public boolean contains (FormattedDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     return this.disk.getAbsolutePath ().equals (disk.getAbsolutePath ());
   }
@@ -144,7 +187,9 @@ class AppleDiskTab extends AbstractTab
   // This action is triggered by AppleDiskTab.selectNode (String), which calls
   // AbstractTab.showNode (DefaultMutableTreeNode). That will trigger this listener
   // ONLY if the value is different, so it is set to null first to force the event.
+  // ---------------------------------------------------------------------------------//
   private void setSelectionListener (JTree tree)
+  // ---------------------------------------------------------------------------------//
   {
     tree.addTreeSelectionListener (new TreeSelectionListener ()
     {

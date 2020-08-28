@@ -4,8 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class PascalCodeStatement implements PascalConstants
+// -----------------------------------------------------------------------------------//
 {
   private static final String[] compValue =
       { "invalid", "", "REAL", "", "STR", "", "BOOL", "", "POWR", "", "BYT", "", "WORD" };
@@ -20,9 +23,11 @@ public class PascalCodeStatement implements PascalConstants
   int ptr;                    // temp
   byte[] buffer;
   boolean jumpTarget;
-  List<Jump> jumps = new ArrayList<Jump> ();
+  List<Jump> jumps = new ArrayList<> ();
 
+  // ---------------------------------------------------------------------------------//
   public PascalCodeStatement (byte[] buffer, int ptr, int procPtr)
+  // ---------------------------------------------------------------------------------//
   {
     this.ptr = ptr;
     this.buffer = buffer;
@@ -75,8 +80,8 @@ public class PascalCodeStatement implements PascalConstants
             int max = min + (p2 - p1) * 2;
             for (int i = min; i <= max; i += 2)
             {
-              jumps.add (new Jump (i,
-                  i - HexFormatter.intValue (buffer[i], buffer[i + 1]), v++));
+              jumps.add (
+                  new Jump (i, i - Utility.intValue (buffer[i], buffer[i + 1]), v++));
             }
             break;
 
@@ -223,44 +228,58 @@ public class PascalCodeStatement implements PascalConstants
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getWord (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     return (buffer[ptr + 1] & 0xFF) * 256 + (buffer[ptr] & 0xFF);
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getLengthOfB (byte b)
+  // ---------------------------------------------------------------------------------//
   {
     return (b & 0x80) == 0x80 ? 2 : 1;
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getValueOfB (byte[] buffer, int ptr, int length)
+  // ---------------------------------------------------------------------------------//
   {
     if (length == 2)
       return (buffer[ptr] & 0x7F) * 256 + (buffer[ptr + 1] & 0xFF);
     return buffer[ptr] & 0xFF;
   }
 
+  // ---------------------------------------------------------------------------------//
   private void setParameters (int p1)
+  // ---------------------------------------------------------------------------------//
   {
     description = description.replaceFirst (":1", p1 + "");
     extras = "#" + p1;
   }
 
+  // ---------------------------------------------------------------------------------//
   private void setParameters (int p1, int p2)
+  // ---------------------------------------------------------------------------------//
   {
     setParameters (p1);
     extras += ", #" + p2;
     description = description.replaceFirst (":2", p2 + "");
   }
 
+  // ---------------------------------------------------------------------------------//
   private void setParameters (int p1, int p2, String p3)
+  // ---------------------------------------------------------------------------------//
   {
     setParameters (p1, p2);
     description = description.replaceFirst (":3", p3);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     String hex = getHex (buffer, ptr, length > 4 ? 4 : length);
     StringBuilder text = new StringBuilder ();
@@ -290,7 +309,9 @@ public class PascalCodeStatement implements PascalConstants
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getHex (byte[] buffer, int offset, int length)
+  // ---------------------------------------------------------------------------------//
   {
     if ((offset + length) >= buffer.length)
     {
@@ -305,7 +326,9 @@ public class PascalCodeStatement implements PascalConstants
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   class Jump
+  // ---------------------------------------------------------------------------------//
   {
     int addressFrom;
     int addressTo;

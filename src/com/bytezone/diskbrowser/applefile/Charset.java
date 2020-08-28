@@ -1,31 +1,54 @@
 package com.bytezone.diskbrowser.applefile;
 
+import java.awt.image.DataBuffer;
+
 // Found on Pascal disks
-public class Charset extends AbstractFile
+// -----------------------------------------------------------------------------------//
+public class Charset extends CharacterList
+// -----------------------------------------------------------------------------------//
 {
+  private static final int charsX = 16;
+
+  // ---------------------------------------------------------------------------------//
   public Charset (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
+
+    int ptr = 0;
+
+    while (ptr < buffer.length)
+    {
+      characters.add (new CharsetCharacter (buffer, ptr));
+      ptr += sizeY;
+    }
+
+    buildImage (borderX, borderY, gapX, gapY, sizeX, sizeY, charsX);
   }
 
-  @Override
-  public String getText ()
+  // ---------------------------------------------------------------------------------//
+  class CharsetCharacter extends Character
+  // ---------------------------------------------------------------------------------//
   {
-    StringBuilder text = new StringBuilder ();
-    for (int i = 0; i < buffer.length; i += 8)
+    // -------------------------------------------------------------------------------//
+    public CharsetCharacter (byte[] buffer, int ptr)
+    // -------------------------------------------------------------------------------//
     {
-      for (int line = 7; line >= 0; line--)
+      super (sizeX, sizeY);
+
+      DataBuffer dataBuffer = image.getRaster ().getDataBuffer ();
+      int element = 0;
+      ptr += sizeY;         // start at the end and move backwards
+
+      for (int i = 0; i < sizeY; i++)
       {
-        int value = buffer[i + line] & 0xFF;
-        for (int bit = 0; bit < 8; bit++)
+        int value = buffer[--ptr] & 0xFF;
+        for (int j = 0; j < sizeX; j++)
         {
-          text.append ((value & 0x01) == 1 ? "X" : ".");
-          value >>= 1;
+          dataBuffer.setElem (element++, (value & 0x01) == 0 ? 0 : 0xFF);
+          value >>>= 1;
         }
-        text.append ("\n");
       }
-      text.append ("\n");
     }
-    return text.toString ();
   }
 }

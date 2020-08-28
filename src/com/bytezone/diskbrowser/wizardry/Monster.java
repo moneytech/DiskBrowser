@@ -7,7 +7,9 @@ import java.util.List;
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
 
+// -----------------------------------------------------------------------------------//
 class Monster extends AbstractFile implements Comparable<Monster>
+// -----------------------------------------------------------------------------------//
 {
   public final String genericName;
   public final String realName;
@@ -33,7 +35,7 @@ class Monster extends AbstractFile implements Comparable<Monster>
   int resistance;
   int abilities;
   public final Dice groupSize, hitPoints;
-  List<Dice> damage = new ArrayList<Dice> ();
+  List<Dice> damage = new ArrayList<> ();
 
   static int counter = 0;
   static boolean debug = true;
@@ -45,21 +47,29 @@ class Monster extends AbstractFile implements Comparable<Monster>
       { "Fighter", "Mage", "Priest", "Thief", "Midget", "Giant", "Mythical", "Dragon",
         "Animal", "Were", "Undead", "Demon", "Insect", "Enchanted" };
 
-  private static int[] experience =
-      { 55, 235, 415, 230, 380, 620, 840, 520, 550, 350,                    // 00-09
-        475, 515, 920, 600, 735, 520, 795, 780, 990, 795,                   // 10-19
-        1360, 1320, 1275, 680, 960, 600, 755, 1120, 2075, 870,              // 20-29
-        960, 1120, 1120, 2435, 1080, 2280, 975, 875, 1135, 1200,            // 30-39
-        620, 740, 1460, 1245, 960, 1405, 1040, 1220, 1520, 1000,            // 40-49
-        960, 2340, 2160, 2395, 790, 1140, 1235, 1790, 1720, 2240,           // 50-59
-        1475, 1540, 1720, 1900, 1240, 1220, 1020, 20435, 5100, 3515,        // 60-69
-        2115, 2920, 2060, 2140, 1400, 1640, 1280, 4450, 42840, 3300,        // 70-79
-        40875, 5000, 3300, 2395, 1935, 1600, 3330, 44090, 40840, 5200,      // 80-89
-        4155, 3000, 9200, 3160, 7460, 7320, 15880, 1600, 2200, 1000, 1900   // 90-100
-      };
+  private static int[] experience = { 55, 235, 415, 230, 380, 620, 840, 520, 550, 350,                    // 00-09
+                                      475, 515, 920, 600, 735, 520, 795, 780, 990, 795,                   // 10-19
+                                      1360, 1320, 1275, 680, 960, 600, 755, 1120, 2075,
+                                      870,              // 20-29
+                                      960, 1120, 1120, 2435, 1080, 2280, 975, 875, 1135,
+                                      1200,            // 30-39
+                                      620, 740, 1460, 1245, 960, 1405, 1040, 1220, 1520,
+                                      1000,            // 40-49
+                                      960, 2340, 2160, 2395, 790, 1140, 1235, 1790, 1720,
+                                      2240,           // 50-59
+                                      1475, 1540, 1720, 1900, 1240, 1220, 1020, 20435,
+                                      5100, 3515,        // 60-69
+                                      2115, 2920, 2060, 2140, 1400, 1640, 1280, 4450,
+                                      42840, 3300,        // 70-79
+                                      40875, 5000, 3300, 2395, 1935, 1600, 3330, 44090,
+                                      40840, 5200,      // 80-89
+                                      4155, 3000, 9200, 3160, 7460, 7320, 15880, 1600,
+                                      2200, 1000, 1900   // 90-100
+  };
 
-  public Monster (String name, byte[] buffer, List<Reward> rewards,
-      List<Monster> monsters)
+  // ---------------------------------------------------------------------------------//
+  Monster (String name, byte[] buffer, List<Reward> rewards, List<Monster> monsters)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -99,8 +109,10 @@ class Monster extends AbstractFile implements Comparable<Monster>
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -186,7 +198,9 @@ class Monster extends AbstractFile implements Comparable<Monster>
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public int getExperience ()
+  // ---------------------------------------------------------------------------------//
   {
     // these values definitely affect the damage a monster does (when breathing?)
     int exp2 = ((buffer[72] & 0xFF) * (buffer[74] & 0xFF) - 1) * 20;
@@ -203,28 +217,38 @@ class Monster extends AbstractFile implements Comparable<Monster>
     return exp2 + exp3 + exp4 + exp5 + exp6 + exp7 + exp8 + exp9 + exp10 + exp11 + exp12;
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getBonus (int base, int value)
+  // ---------------------------------------------------------------------------------//
   {
     return base * pwr[value];
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setImage (BufferedImage image)
+  // ---------------------------------------------------------------------------------//
   {
     this.image = image;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getName ()
+  // ---------------------------------------------------------------------------------//
   {
     return realName;
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getRealName ()
+  // ---------------------------------------------------------------------------------//
   {
     return realName;
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getDamage ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     for (Dice d : damage)
@@ -234,7 +258,9 @@ class Monster extends AbstractFile implements Comparable<Monster>
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getDump (int block)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder line =
         new StringBuilder (String.format ("%3d %-16s", monsterID, realName));
@@ -254,13 +280,17 @@ class Monster extends AbstractFile implements Comparable<Monster>
     return line.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public boolean match (int monsterID)
+  // ---------------------------------------------------------------------------------//
   {
     return this.monsterID == monsterID;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int compareTo (Monster other)               // where is this used?
+  // ---------------------------------------------------------------------------------//
   {
     if (this.type == other.type)
       return 0;
@@ -269,8 +299,10 @@ class Monster extends AbstractFile implements Comparable<Monster>
     return 1;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     return realName;
   }

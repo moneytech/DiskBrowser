@@ -9,12 +9,16 @@ import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.disk.DefaultAppleFileSource;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 
+// -----------------------------------------------------------------------------------//
 class AttributeManager extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
-  List<Statistic> list = new ArrayList<Statistic> ();
+  List<Statistic> list = new ArrayList<> ();
   Header header;
 
+  // ---------------------------------------------------------------------------------//
   public AttributeManager (String name, byte[] buffer, Header header)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
     this.header = header;
@@ -23,7 +27,9 @@ class AttributeManager extends AbstractFile
       list.add (new Statistic (attrNo));
   }
 
+  // ---------------------------------------------------------------------------------//
   public void addNodes (DefaultMutableTreeNode node, FormattedDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     node.setAllowsChildren (true);
 
@@ -37,8 +43,10 @@ class AttributeManager extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ("Attribute  Frequency\n");
     text.append ("---------  ---------\n");
@@ -50,10 +58,12 @@ class AttributeManager extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Statistic
+  // ---------------------------------------------------------------------------------//
   {
     int id;
-    List<ZObject> list = new ArrayList<ZObject> ();
+    List<ZObject> list = new ArrayList<> ();
 
     public Statistic (int id)
     {
@@ -69,7 +79,7 @@ class AttributeManager extends AbstractFile
           new StringBuilder ("Objects with attribute " + id + " set:\n\n");
       for (ZObject o : list)
       {
-        text.append (String.format ("%3d  %-28s%n", o.id, o.getName ()));
+        text.append (String.format ("%3d  %-28s%n", o.getId (), o.getName ()));
       }
       if (text.length () > 0)
         text.deleteCharAt (text.length () - 1);

@@ -6,24 +6,31 @@ import com.bytezone.diskbrowser.disk.AbstractSector;
 import com.bytezone.diskbrowser.disk.Disk;
 import com.bytezone.diskbrowser.disk.DiskAddress;
 
+// -----------------------------------------------------------------------------------//
 class ProdosBitMapSector extends AbstractSector
+// -----------------------------------------------------------------------------------//
 {
   private final ProdosDisk parent;
 
+  // ---------------------------------------------------------------------------------//
   ProdosBitMapSector (ProdosDisk parent, Disk disk, byte[] buffer, DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
     super (disk, buffer, da);
     this.parent = parent;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String createText ()
+  // ---------------------------------------------------------------------------------//
   {
     Dimension grid = parent.getGridLayout ();
 
     // check range of bits for current block - so far I don't have a disk that needs
     // more than a single block
-    int relativeBlock = diskAddress.getBlock () - parent.vdh.bitMapBlock;
+    int relativeBlock =
+        diskAddress.getBlockNo () - parent.getVolumeDirectoryHeader ().bitMapBlock;
     int startBit = relativeBlock * 4096;
     //    int endBit = startBit + 4096;
     if (startBit >= grid.width * grid.height)

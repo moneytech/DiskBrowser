@@ -6,23 +6,30 @@ import java.util.List;
 
 import com.bytezone.diskbrowser.utilities.FileFormatException;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// ---------------------------------------------------------------------------------//
 public class PascalCode extends AbstractFile
     implements PascalConstants, Iterable<PascalSegment>
+// ---------------------------------------------------------------------------------//
 {
-  private final List<PascalSegment> segments = new ArrayList<PascalSegment> (16);
+  private final List<PascalSegment> segments = new ArrayList<> (16);
   private final String comment;
   //  private final int blockOffset;
   //  private final Relocator relocator;
 
+  // ---------------------------------------------------------------------------------//
   public static void print ()
+  // ---------------------------------------------------------------------------------//
   {
     for (int i = 0; i < 216; i++)
       System.out.printf ("%3d  %d  %3s  %s%n", i + 128, PascalConstants.mnemonicSize[i],
           PascalConstants.mnemonics[i], PascalConstants.descriptions[i]);
   }
 
+  // ---------------------------------------------------------------------------------//
   public PascalCode (String name, byte[] buffer, int blockOffset)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -40,7 +47,7 @@ public class PascalCode extends AbstractFile
     for (int i = 0; i < 16; i++)
     {
       String codeName = HexFormatter.getString (buffer, 0x40 + i * 8, 8).trim ();
-      int size = HexFormatter.intValue (buffer[i * 4 + 2], buffer[i * 4 + 3]);
+      int size = Utility.intValue (buffer[i * 4 + 2], buffer[i * 4 + 3]);
       if (codeName.length () == 0 && size > 0)
         codeName = "<NULL" + ++nonameCounter + ">";
       if (size > 0)
@@ -55,8 +62,10 @@ public class PascalCode extends AbstractFile
     comment = HexFormatter.getPascalString (buffer, 0x1B0);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder (getHeader ());
 
@@ -75,13 +84,10 @@ public class PascalCode extends AbstractFile
     return text.toString ();
   }
 
-  private String getHeader ()
-  {
-    return "Name : " + name + "\n\n";
-  }
-
+  // ---------------------------------------------------------------------------------//
   @Override
   public Iterator<PascalSegment> iterator ()
+  // ---------------------------------------------------------------------------------//
   {
     return segments.iterator ();
   }

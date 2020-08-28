@@ -9,12 +9,16 @@ import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.disk.DefaultAppleFileSource;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 
+// -----------------------------------------------------------------------------------//
 class PropertyManager extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
-  List<Statistic> list = new ArrayList<Statistic> ();
+  List<Statistic> list = new ArrayList<> ();
   Header header;
 
-  public PropertyManager (String name, byte[] buffer, Header header)
+  // ---------------------------------------------------------------------------------//
+  PropertyManager (String name, byte[] buffer, Header header)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
     this.header = header;
@@ -26,14 +30,16 @@ class PropertyManager extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   public void addNodes (DefaultMutableTreeNode node, FormattedDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     node.setAllowsChildren (true);
 
     for (Statistic stat : list)
       if (stat.list.size () > 0)
       {
-        String title = "Property " + header.propertyNames[stat.id].trim ();
+        String title = "Property " + header.getPropertyName (stat.id).trim ();
         DefaultMutableTreeNode child = new DefaultMutableTreeNode (
             new DefaultAppleFileSource (title, stat.getText (), disk));
         node.add (child);
@@ -41,8 +47,10 @@ class PropertyManager extends AbstractFile
       }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ("Property   Type    Frequency\n");
     text.append ("--------   -----   ---------\n");
@@ -54,10 +62,12 @@ class PropertyManager extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Statistic
+  // ---------------------------------------------------------------------------------//
   {
     int id;
-    List<ZObject> list = new ArrayList<ZObject> ();
+    List<ZObject> list = new ArrayList<> ();
 
     public Statistic (int id)
     {
@@ -72,13 +82,13 @@ class PropertyManager extends AbstractFile
 
     String getText ()
     {
-      StringBuilder text =
-          new StringBuilder ("Objects with property " + id + " set:\n\n");
+      StringBuilder text = new StringBuilder (String
+          .format ("Objects with property %d %s set:%n%n", id, header.propertyNames[id]));
       for (ZObject o : list)
       {
         ZObject.Property p = o.getProperty (id);
-        text.append (String.format ("%3d  %-29s%s%n", o.id, o.getName (),
-                                    p.toString ().substring (7)));
+        text.append (String.format ("%02X  %-29s%s%n", o.getId (), o.getName (),
+            p.toString ().substring (11)));
       }
       if (text.length () > 0)
         text.deleteCharAt (text.length () - 1);
@@ -88,8 +98,8 @@ class PropertyManager extends AbstractFile
     @Override
     public String toString ()
     {
-      return String.format ("   %2d      %-6s    %3d", id, header.propertyNames[id],
-                            list.size ());
+      return String.format ("   %2d      %-6s    %3d", id, header.getPropertyName (id),
+          list.size ());
     }
   }
 }

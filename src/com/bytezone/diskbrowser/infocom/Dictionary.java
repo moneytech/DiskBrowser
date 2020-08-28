@@ -8,27 +8,35 @@ import java.util.TreeMap;
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
 
+// -----------------------------------------------------------------------------------//
 class Dictionary extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
   private final Map<Integer, ZString> dictionary;
   private final int totalEntries;
   private final int totalSeparators;
   private final int dictionaryPtr, dictionarySize;
   private final int entryLength;
-  //  private final Header header;
+  private final String separators;
 
-  // this could be a Google Multimap
-  Map<Integer, List<WordEntry>> synonymList = new TreeMap<Integer, List<WordEntry>> ();
+  Map<Integer, List<WordEntry>> synonymList = new TreeMap<> ();
 
-  public Dictionary (Header header)
+  // ---------------------------------------------------------------------------------//
+  Dictionary (Header header)
+  // ---------------------------------------------------------------------------------//
   {
     super ("Dictionary", header.buffer);
-    //    this.header = header;
 
     dictionaryPtr = header.dictionaryOffset;
-    dictionary = new TreeMap<Integer, ZString> ();
+    dictionary = new TreeMap<> ();
 
     totalSeparators = buffer[dictionaryPtr] & 0xFF;
+
+    StringBuilder sep = new StringBuilder ();
+    for (int i = 0; i < totalSeparators; i++)
+      sep.append ((char) (buffer[dictionaryPtr + i + 1] & 0xFF));
+    separators = sep.toString ();
+
     int ptr = dictionaryPtr + totalSeparators + 1;
     entryLength = buffer[ptr++] & 0xFF;
 
@@ -38,7 +46,7 @@ class Dictionary extends AbstractFile
     int count = 0;
     for (int i = 0; i < totalEntries; i++)
     {
-      ZString string = new ZString (buffer, ptr, header);
+      ZString string = new ZString (header, ptr);
       dictionary.put (ptr, string);
       WordEntry wordEntry = new WordEntry (string, count++);
 
@@ -46,18 +54,20 @@ class Dictionary extends AbstractFile
       List<WordEntry> wordEntryList = synonymList.get (wordEntry.key);
       if (wordEntryList == null)
       {
-        wordEntryList = new ArrayList<WordEntry> ();
+        wordEntryList = new ArrayList<> ();
         synonymList.put (wordEntry.key, wordEntryList);
       }
       wordEntryList.add (wordEntry);
 
-      // check for words with the property flag
+      // check for words with the direction flag
       if ((buffer[ptr + 4] & 0x10) != 0)
       {
         int b1 = buffer[ptr + 5] & 0xFF;
-        int property = (b1 >= 1 && b1 <= 31) ? b1 : buffer[ptr + 6] & 0xFF;
-        if (header.propertyNames[property] == null
-            || header.propertyNames[property].length () > string.value.length ())
+        int b2 = buffer[ptr + 6] & 0xFF;
+        int property = b2 == 0 ? b1 : b2;
+        String propertyName = header.getPropertyName (property);
+        System.out.printf ("%02X  %s%n", property, string.value);
+        if (propertyName == null || propertyName.length () > string.value.length ())
           header.propertyNames[property] = string.value;
       }
       ptr += entryLength;
@@ -68,23 +78,82 @@ class Dictionary extends AbstractFile
     for (int i = 1; i < header.propertyNames.length; i++)
       if (header.propertyNames[i] == null)
         header.propertyNames[i] = i + "";
+
+    // testing (only works in Zork 1)
+    if (true)
+    {
+      if (header.propertyNames[4].equals ("4"))
+        header.propertyNames[4] = "PSEUDO";
+      if (header.propertyNames[5].equals ("5"))
+        header.propertyNames[5] = "GLOBAL";
+      if (header.propertyNames[6].equals ("6"))
+        header.propertyNames[6] = "VTYPE";
+      if (header.propertyNames[7].equals ("7"))
+        header.propertyNames[7] = "STRENGTH";
+      if (header.propertyNames[10].equals ("10"))
+        header.propertyNames[10] = "CAPACITY";
+      if (header.propertyNames[12].equals ("12"))
+        header.propertyNames[12] = "TVALU";
+      if (header.propertyNames[13].equals ("13"))
+        header.propertyNames[13] = "VALUE";
+      if (header.propertyNames[15].equals ("15"))
+        header.propertyNames[15] = "SIZE";
+      if (header.propertyNames[16].equals ("16"))
+        header.propertyNames[16] = "ADJ";
+    }
+
+    // 04    = PSEUDO    (property 4)
+    // 05    = GLOBAL    (property 5)
+    // 06    = VTYPE     (property 6)
+    // 07    = STRENGTH  (property 7)
+    // STR3  = TEXT      (property 8)
+    // CODE2 = DESCFCN   (property 9)
+    // 0A    = CAPACITY  (property 10)
+    // STR1  = LDESC     (property 11)
+    // 0C    = TVALUE    (property 12)   value in trophy case
+    // 0D    = VALUE     (property 13)
+    // STR2  = FDESC     (property 14)
+    // 0F    = SIZE      (property 15)
+    // 10    = ADJ       (property 16)
+    // CODE1 = ACTION    (property 17)
+    // 12    = DICT      (property 18)
+
+    // 13  land
+    // 14  out
+    // 15  in, inside, into
+    // 16  d, down
+    // 17  u, up
+    // 18  sw, southw
+    // 19  se, southe
+    // 1A  nw, northw
+    // 1B  ne, northe
+    // 1C  s, south
+    // 1D  w, west
+    // 1E  e, east
+    // 1F  n, north
   }
 
+  // ---------------------------------------------------------------------------------//
   public boolean containsWordAt (int address)
+  // ---------------------------------------------------------------------------------//
   {
     return dictionary.containsKey (address);
   }
 
+  // ---------------------------------------------------------------------------------//
   public String wordAt (int address)
+  // ---------------------------------------------------------------------------------//
   {
     if (dictionary.containsKey (address))
       return dictionary.get (address).value;
     return "dictionary can't find word @ " + address;
   }
 
+  // ---------------------------------------------------------------------------------//
   public List<String> getVerbs (int value)
+  // ---------------------------------------------------------------------------------//
   {
-    List<String> words = new ArrayList<String> ();
+    List<String> words = new ArrayList<> ();
     int ptr = dictionaryPtr + totalSeparators + 4;
 
     for (ZString word : dictionary.values ())
@@ -101,9 +170,11 @@ class Dictionary extends AbstractFile
     return words;
   }
 
+  // ---------------------------------------------------------------------------------//
   public List<String> getPrepositions (int value)
+  // ---------------------------------------------------------------------------------//
   {
-    List<String> words = new ArrayList<String> ();
+    List<String> words = new ArrayList<> ();
     int ptr = dictionaryPtr + totalSeparators + 4;
 
     for (ZString word : dictionary.values ())
@@ -120,30 +191,39 @@ class Dictionary extends AbstractFile
     return words;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getHexDump ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     text.append (HexFormatter.format (buffer, dictionaryPtr, dictionarySize));
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
-    //		text.append (String.format ("Total entries : %,6d%n", totalEntries));
-    //		text.append (String.format ("Separators    : %,6d%n", totalSeparators));
-    //		text.append (String.format ("Offset        : %,6d   %04X%n%n", dictionaryPtr, dictionaryPtr));
+    text.append (String.format ("Entries    : %,6d%n", totalEntries));
+    text.append (String.format ("Separators : %s%n", separators));
+    text.append (
+        String.format ("Offset     : %,6d   %04X%n%n", dictionaryPtr, dictionaryPtr));
 
     int count = 0;
     int ptr = dictionaryPtr + totalSeparators + 4;
 
     for (ZString word : dictionary.values ())
     {
-      text.append (String.format ("%04X   %3d   %-6s   %s", ptr, count++, word.value,
-          HexFormatter.getHexString (buffer, ptr + 4, entryLength - 4)));
+      String bits = Integer.toBinaryString (buffer[ptr + 4] & 0xFF);
+      if (bits.length () < 8)
+        bits = "00000000".substring (bits.length ()) + bits;
+
+      text.append (String.format ("%04X   %3d   %-6s   %s  %s", ptr, count++, word.value,
+          bits, HexFormatter.getHexString (buffer, ptr + 4, entryLength - 4)));
       int b1 = buffer[ptr + 4] & 0xFF;
       int b2 = buffer[ptr + 5] & 0xFF;
       int b3 = buffer[ptr + 6] & 0xFF;
@@ -156,19 +236,19 @@ class Dictionary extends AbstractFile
       ptr += entryLength;
     }
 
-    if (true)
+    if (false)
     {
       int lastValue = 0;
       for (List<WordEntry> list : synonymList.values ())
       {
         WordEntry wordEntry = list.get (0);
-        if (wordEntry.value != lastValue)
+        if (wordEntry.flags != lastValue)
         {
-          lastValue = wordEntry.value;
+          lastValue = wordEntry.flags;
           text.append ("\n");
         }
 
-        if (wordEntry.value == 0x80) // nouns are all in one entry
+        if (wordEntry.flags == 0x80)            // nouns are all in one entry
         {
           for (WordEntry we : list)
             text.append (we + "\n");
@@ -176,8 +256,45 @@ class Dictionary extends AbstractFile
         }
         else
           text.append (wordEntry);
+
         if ((buffer[wordEntry.word.startPtr + 4] & 0x10) != 0)
-          text.append ("  property");
+          text.append ("  direction");
+
+        text.append ("\n");
+      }
+    }
+
+    if (true)
+    {
+      text.append ("\n");
+      int lastValue = 0;
+
+      for (int bit = 1; bit < 256; bit *= 2)
+      {
+        String bits = Integer.toBinaryString (bit & 0xFF);
+        if (bits.length () < 8)
+          bits = "00000000".substring (bits.length ()) + bits;
+
+        text.append (String.format ("Bits:                 %s%n", bits));
+        for (List<WordEntry> list : synonymList.values ())
+        {
+          WordEntry wordEntry = list.get (0);
+          if ((wordEntry.flags & bit) != 0)
+          {
+            if (wordEntry.flags != lastValue)
+            {
+              lastValue = wordEntry.flags;
+              text.append ("\n");
+            }
+            if (wordEntry.flags == 0x80)            // nouns are all in one entry
+            {
+              for (WordEntry we : list)
+                text.append (we + "\n");
+            }
+            else
+              text.append (wordEntry + "\n");
+          }
+        }
         text.append ("\n");
       }
     }
@@ -186,11 +303,13 @@ class Dictionary extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private class WordEntry implements Comparable<WordEntry>
+  // ---------------------------------------------------------------------------------//
   {
     ZString word;
     int seq;
-    int value;
+    int flags;
     int key;
     String bits;
 
@@ -205,7 +324,7 @@ class Dictionary extends AbstractFile
       int b3 = buffer[word.startPtr + 6] & 0xFF;
 
       this.key = (b1 << 16) | (b2 << 8) | b3;
-      this.value = b1;
+      this.flags = b1;
       this.bits = Integer.toBinaryString (b1);
       if (bits.length () < 8)
         bits = "00000000".substring (bits.length ()) + bits;
@@ -214,7 +333,7 @@ class Dictionary extends AbstractFile
     @Override
     public int compareTo (WordEntry o)
     {
-      return this.value - o.value;
+      return this.flags - o.flags;
     }
 
     @Override

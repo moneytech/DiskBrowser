@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// -----------------------------------------------------------------------------------//
 class Range implements Iterable<Address>
+// -----------------------------------------------------------------------------------//
 {
   //  private static final Pattern cellAddress = Pattern.compile ("[A-B]?[A-Z][0-9]{1,3}");
   private static final Pattern rangePattern =
@@ -14,12 +16,14 @@ class Range implements Iterable<Address>
   //  private static final Pattern addressList = Pattern.compile ("\\(([^,]+(,[^,]+)*)\\)");
 
   private Address from, to;
-  private final List<Address> range = new ArrayList<Address> ();
+  private final List<Address> range = new ArrayList<> ();
   private final Cell cell;
 
   private boolean isHorizontal;
 
-  public Range (Cell cell, String rangeText)
+  // ---------------------------------------------------------------------------------//
+  Range (Cell cell, String rangeText)
+  // ---------------------------------------------------------------------------------//
   {
     this.cell = cell;
 
@@ -35,7 +39,9 @@ class Range implements Iterable<Address>
       throw new IllegalArgumentException (rangeText);
   }
 
+  // ---------------------------------------------------------------------------------//
   private void populateRange ()
+  // ---------------------------------------------------------------------------------//
   {
     range.add (from);
     cell.getCell (from);
@@ -62,39 +68,53 @@ class Range implements Iterable<Address>
     from = tempFrom;
   }
 
+  // ---------------------------------------------------------------------------------//
   static boolean isRange (String text)
+  // ---------------------------------------------------------------------------------//
   {
     return rangePattern.matcher (text).matches ();
   }
 
+  // ---------------------------------------------------------------------------------//
   boolean isHorizontal ()
+  // ---------------------------------------------------------------------------------//
   {
     return isHorizontal;
   }
 
+  // ---------------------------------------------------------------------------------//
   boolean isVertical ()
+  // ---------------------------------------------------------------------------------//
   {
     return !isHorizontal;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public Iterator<Address> iterator ()
+  // ---------------------------------------------------------------------------------//
   {
     return range.iterator ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public int size ()
+  // ---------------------------------------------------------------------------------//
   {
     return range.size ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public Address get (int index)
+  // ---------------------------------------------------------------------------------//
   {
     return index < 0 || index >= range.size () ? null : range.get (index);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     if (from == null || to == null)
     {

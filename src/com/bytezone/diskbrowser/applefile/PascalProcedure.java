@@ -5,8 +5,11 @@ import java.util.List;
 
 import com.bytezone.diskbrowser.applefile.PascalCodeStatement.Jump;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class PascalProcedure
+// -----------------------------------------------------------------------------------//
 {
   // all procedures have these fields
   byte[] buffer;
@@ -22,16 +25,18 @@ public class PascalProcedure
   int codeEnd;
   int parmSize;
   int dataSize;
-  List<PascalCodeStatement> statements = new ArrayList<PascalCodeStatement> ();
+  List<PascalCodeStatement> statements = new ArrayList<> ();
   AssemblerProgram assembler;
   int jumpTable = -8;
 
+  // ---------------------------------------------------------------------------------//
   public PascalProcedure (byte[] buffer, int slot)
+  // ---------------------------------------------------------------------------------//
   {
     this.buffer = buffer;
     this.slot = slot;
     int p = buffer.length - 2 - slot * 2;
-    offset = HexFormatter.intValue (buffer[p], buffer[p + 1]);
+    offset = Utility.intValue (buffer[p], buffer[p + 1]);
     procOffset = p - offset;
     valid = procOffset > 0;
 
@@ -39,14 +44,16 @@ public class PascalProcedure
     {
       procedureNo = buffer[procOffset] & 0xFF;
       procLevel = buffer[procOffset + 1] & 0xFF;
-      codeStart = HexFormatter.intValue (buffer[procOffset - 2], buffer[procOffset - 1]);
-      codeEnd = HexFormatter.intValue (buffer[procOffset - 4], buffer[procOffset - 3]);
-      parmSize = HexFormatter.intValue (buffer[procOffset - 6], buffer[procOffset - 5]);
-      dataSize = HexFormatter.intValue (buffer[procOffset - 8], buffer[procOffset - 7]);
+      codeStart = Utility.intValue (buffer[procOffset - 2], buffer[procOffset - 1]);
+      codeEnd = Utility.intValue (buffer[procOffset - 4], buffer[procOffset - 3]);
+      parmSize = Utility.intValue (buffer[procOffset - 6], buffer[procOffset - 5]);
+      dataSize = Utility.intValue (buffer[procOffset - 8], buffer[procOffset - 7]);
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void decode ()
+  // ---------------------------------------------------------------------------------//
   {
     if (statements.size () > 0 || assembler != null)
       return;
@@ -118,18 +125,22 @@ public class PascalProcedure
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   public List<PascalCodeStatement> extractStrings ()
+  // ---------------------------------------------------------------------------------//
   {
     decode ();
-    List<PascalCodeStatement> strings = new ArrayList<PascalCodeStatement> ();
+    List<PascalCodeStatement> strings = new ArrayList<> ();
     for (PascalCodeStatement cs : statements)
       if (cs.val == 166)
         strings.add (cs);
     return strings;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     if (!valid)
       return "";

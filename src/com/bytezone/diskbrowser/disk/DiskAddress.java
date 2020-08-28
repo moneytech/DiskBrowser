@@ -1,14 +1,32 @@
 package com.bytezone.diskbrowser.disk;
 
+// -----------------------------------------------------------------------------------//
 public interface DiskAddress extends Comparable<DiskAddress>
+// -----------------------------------------------------------------------------------//
 {
-  public int getBlock ();
+  public int getBlockNo ();
 
-  public int getTrack ();
+  public int getTrackNo ();
 
-  public int getSector ();
+  public int getSectorNo ();
+
+  public boolean isZero ();
 
   public Disk getDisk ();
 
   public boolean matches (DiskAddress other);
+
+  // ---------------------------------------------------------------------------------//
+  public default byte[] readBlock ()
+  // ---------------------------------------------------------------------------------//
+  {
+    return getDisk ().readBlock (this);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public default boolean isValidAddress ()
+  // ---------------------------------------------------------------------------------//
+  {
+    return getDisk ().isValidAddress (this);
+  }
 }

@@ -5,13 +5,17 @@ import com.bytezone.diskbrowser.disk.AppleDiskAddress;
 import com.bytezone.diskbrowser.disk.DiskAddress;
 import com.bytezone.diskbrowser.gui.DataSource;
 
+// -----------------------------------------------------------------------------------//
 class DeletedCatalogEntry extends AbstractCatalogEntry
+// -----------------------------------------------------------------------------------//
 {
   boolean allSectorsAvailable = true;
   boolean debug = false;
 
-  public DeletedCatalogEntry (DosDisk dosDisk, DiskAddress catalogSector,
-      byte[] entryBuffer, int dosVersion)
+  // ---------------------------------------------------------------------------------//
+  DeletedCatalogEntry (DosDisk dosDisk, DiskAddress catalogSector, byte[] entryBuffer,
+      int dosVersion)
+  // ---------------------------------------------------------------------------------//
   {
     super (dosDisk, catalogSector, entryBuffer);
 
@@ -38,7 +42,7 @@ class DeletedCatalogEntry extends AbstractCatalogEntry
     }
     int totalBlocks = 0;
 
-    if (reportedSize <= 1 || !disk.isValidAddress (da.getTrack (), da.getSector ()))
+    if (reportedSize <= 1 || !disk.isValidAddress (da.getTrackNo (), da.getSectorNo ()))
     {
       if (debug)
         System.out.println ("invalid catalog entry");
@@ -47,7 +51,7 @@ class DeletedCatalogEntry extends AbstractCatalogEntry
     }
 
     // Loop through all TS-list sectors
-    loop: while (da.getBlock () > 0 || ((AppleDiskAddress) da).zeroFlag ())
+    loop: while (!da.isZero () || ((AppleDiskAddress) da).zeroFlag ())
     {
       if (!dosDisk.stillAvailable (da))
       {
@@ -57,16 +61,16 @@ class DeletedCatalogEntry extends AbstractCatalogEntry
       tsSectors.add (da);
       totalBlocks++;
 
-      byte[] sectorBuffer = disk.readSector (da);
+      byte[] sectorBuffer = disk.readBlock (da);
       for (int i = 12, max = disk.getBlockSize (); i < max; i += 2)
       {
         da = getValidAddress (sectorBuffer, i);
         if (da == null)
           break loop;
-        if (da.getBlock () > 0 && debug)
+        if (!da.isZero () && debug)
           System.out.println (da);
 
-        if (da.getBlock () > 0 || ((AppleDiskAddress) da).zeroFlag ())
+        if (!da.isZero () || ((AppleDiskAddress) da).zeroFlag ())
         {
           if (!dosDisk.stillAvailable (da))
           {
@@ -93,15 +97,19 @@ class DeletedCatalogEntry extends AbstractCatalogEntry
       allSectorsAvailable = false;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getUniqueName ()
+  // ---------------------------------------------------------------------------------//
   {
     // name might not be unique if the file has been deleted
     return "!" + name;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DataSource getDataSource ()
+  // ---------------------------------------------------------------------------------//
   {
     if (!allSectorsAvailable && appleFile == null)
     {
@@ -112,7 +120,9 @@ class DeletedCatalogEntry extends AbstractCatalogEntry
     return super.getDataSource ();
   }
 
-  public String getDetails ()
+  // ---------------------------------------------------------------------------------//
+  String getDetails ()
+  // ---------------------------------------------------------------------------------//
   {
     return String.format ("%-30s  %s", name,
         allSectorsAvailable ? "Recoverable" : "Not recoverable");

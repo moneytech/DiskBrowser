@@ -1,6 +1,15 @@
 package com.bytezone.diskbrowser.prodos;
 
-import static com.bytezone.diskbrowser.prodos.ProdosConstants.*;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.ENTRY_SIZE;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.FREE;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.GSOS_EXTENDED_FILE;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.PASCAL_ON_PROFILE;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.SAPLING;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.SEEDLING;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.SUBDIRECTORY;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.SUBDIRECTORY_HEADER;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.TREE;
+import static com.bytezone.diskbrowser.prodos.ProdosConstants.VOLUME_HEADER;
 
 import java.util.GregorianCalendar;
 
@@ -8,20 +17,27 @@ import com.bytezone.diskbrowser.disk.AbstractSector;
 import com.bytezone.diskbrowser.disk.Disk;
 import com.bytezone.diskbrowser.disk.DiskAddress;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 class ProdosCatalogSector extends AbstractSector
+// -----------------------------------------------------------------------------------//
 {
   private final ProdosDisk parent;
 
+  // ---------------------------------------------------------------------------------//
   ProdosCatalogSector (ProdosDisk parent, Disk disk, byte[] buffer,
       DiskAddress diskAddress)
+  // ---------------------------------------------------------------------------------//
   {
     super (disk, buffer, diskAddress);
     this.parent = parent;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String createText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = getHeader ("Volume Directory Block");
 
@@ -77,11 +93,13 @@ class ProdosCatalogSector extends AbstractSector
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String doFileDescription (int offset)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     int fileType = buffer[offset + 16] & 0xFF;
-    int auxType = HexFormatter.unsignedShort (buffer, offset + 31);
+    int auxType = Utility.unsignedShort (buffer, offset + 31);
     addText (text, buffer, offset + 16, 1,
         "File type (" + ProdosConstants.fileTypes[fileType] + ")");
     addTextAndDecimal (text, buffer, offset + 17, 2, "Key pointer");
@@ -102,38 +120,51 @@ class ProdosCatalogSector extends AbstractSector
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String doVolumeDirectoryHeader (int offset)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
+
     addText (text, buffer, offset + 16, 4, "Not used");
     text.append (getCommonHeader (offset));
     addTextAndDecimal (text, buffer, offset + 35, 2, "Bit map pointer");
     addTextAndDecimal (text, buffer, offset + 37, 2, "Total blocks");
+
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String doSubdirectoryHeader (int offset)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
+
     addText (text, buffer, offset + 16, 1, "Hex $75");
     addText (text, buffer, offset + 17, 3, "Not used");
     text.append (getCommonHeader (offset));
     addTextAndDecimal (text, buffer, offset + 35, 2, "Parent block");
     addTextAndDecimal (text, buffer, offset + 37, 1, "Parent entry number");
     addTextAndDecimal (text, buffer, offset + 38, 1, "Parent entry length");
+
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getCommonHeader (int offset)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
+
     addText (text, buffer, offset + 20, 4, "Not used");
     GregorianCalendar created = HexFormatter.getAppleDate (buffer, offset + 24);
     String dateC = created == null ? "" : parent.df.format (created.getTime ());
     addText (text, buffer, offset + 24, 4, "Creation date : " + dateC);
+
     addText (text, buffer, offset + 28, 1, "Prodos version");
     addText (text, buffer, offset + 29, 1, "Minimum version");
     addText (text, buffer, offset + 30, 1, "Access");
+
     addTextAndDecimal (text, buffer, offset + 31, 1, "Entry length");
     addTextAndDecimal (text, buffer, offset + 32, 1, "Entries per block");
     addTextAndDecimal (text, buffer, offset + 33, 2, "File count");
@@ -141,7 +172,9 @@ class ProdosCatalogSector extends AbstractSector
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getAuxilliaryText (int fileType, int auxType)
+  // ---------------------------------------------------------------------------------//
   {
     switch (fileType)
     {
@@ -165,7 +198,9 @@ class ProdosCatalogSector extends AbstractSector
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getType (byte flag)
+  // ---------------------------------------------------------------------------------//
   {
     switch ((flag & 0xF0) >> 4)
     {
@@ -193,11 +228,18 @@ class ProdosCatalogSector extends AbstractSector
   }
 
   // Deleted files leave the name intact, but set the name length to zero
+  // Also - the pointers in the master blocks of a sapling or tree file are 
+  // swapped when the file is deleted.
+
+  // ---------------------------------------------------------------------------------//
   private String getDeletedName (int offset)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
+
     for (int i = offset, max = offset + 15; i < max && buffer[i] != 0; i++)
       text.append ((char) (buffer[i] & 0xFF));
+
     return text.toString ();
   }
 }

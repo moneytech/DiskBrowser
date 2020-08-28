@@ -1,29 +1,38 @@
 package com.bytezone.diskbrowser.infocom;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
 
+// -----------------------------------------------------------------------------------//
 class Grammar extends InfocomAbstractFile
+// -----------------------------------------------------------------------------------//
 {
   private static final int SENTENCE_LENGTH = 8;
-  Header header;
-  int indexPtr, indexSize;
-  int tablePtr, tableSize;
-  int actionPtr, actionSize;
-  int preActionPtr, preActionSize;
-  int prepositionPtr, prepositionSize;
-  int indexEntries;
-  int totalPrepositions;
-  int padding;
+  private final Header header;
+  private final int indexPtr, indexSize;
+  private final int tablePtr, tableSize;
+  private final int actionPtr, actionSize;
+  private final int preActionPtr, preActionSize;
+  private final int prepositionPtr, prepositionSize;
+  private final int indexEntries;
+  private final int totalPrepositions;
+  private final int padding;
 
-  List<SentenceGroup> sentenceGroups = new ArrayList<SentenceGroup> ();
-  Map<Integer, List<Sentence>> actionList = new TreeMap<Integer, List<Sentence>> ();
+  private final List<SentenceGroup> sentenceGroups = new ArrayList<> ();
+  private final Map<Integer, List<Sentence>> actionList = new TreeMap<> ();
 
-  List<Integer> actionRoutines = new ArrayList<Integer> ();
-  List<Integer> preActionRoutines = new ArrayList<Integer> ();
+  private final List<Integer> actionRoutines = new ArrayList<> ();
+  private final List<Integer> preActionRoutines = new ArrayList<> ();
 
-  public Grammar (String name, byte[] buffer, Header header)
+  // ---------------------------------------------------------------------------------//
+  Grammar (String name, byte[] buffer, Header header)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
     this.header = header;
@@ -47,8 +56,9 @@ class Grammar extends InfocomAbstractFile
     totalPrepositions = header.getWord (prepositionPtr);
     prepositionSize = totalPrepositions * 4 + 2;
 
-    if (false)
+    if (true)
     {
+      System.out.println ("\n" + name);
       System.out.printf ("indexPtr      %,8d  %4X%n", indexPtr, indexPtr);
       System.out.printf ("indexSize     %,8d%n", indexSize);
       System.out.printf ("indexEntries  %,8d%n", indexEntries);
@@ -70,21 +80,25 @@ class Grammar extends InfocomAbstractFile
     hexBlocks.add (new HexBlock (actionPtr, actionSize, "Action routines:"));
     hexBlocks.add (new HexBlock (preActionPtr, preActionSize, "Pre-action routines:"));
     hexBlocks.add (new HexBlock (prepositionPtr, prepositionSize, "Preposition table:"));
+    //    System.out.println (getHexDump ());
 
     // create SentenceGroup and Sentence objects and action lists
-    int count = 255;
+    int id = 255;
     for (int i = 0; i < indexEntries; i++)
     {
       int offset = header.getWord (indexPtr + i * 2);
-      SentenceGroup sg = new SentenceGroup (count--, offset);
-      sentenceGroups.add (sg);
-      for (Sentence sentence : sg)
+      SentenceGroup sentenceGroup = new SentenceGroup (id--, offset);
+      sentenceGroups.add (sentenceGroup);
+
+      for (Sentence sentence : sentenceGroup)
       {
-        if (!actionList.containsKey (sentence.actionId))    // add to hashmap
-          actionList.put (sentence.actionId, new ArrayList<Sentence> ());
+        // add to hashmap
+        if (!actionList.containsKey (sentence.actionId))
+          actionList.put (sentence.actionId, new ArrayList<> ());
         actionList.get (sentence.actionId).add (sentence);
 
-        if (sentence.preActionRoutine > 0         // add to pre-action routine list
+        // add to pre-action routine list
+        if (sentence.preActionRoutine > 0
             && !preActionRoutines.contains (sentence.preActionRoutine))
           preActionRoutines.add (sentence.preActionRoutine);
 
@@ -98,7 +112,9 @@ class Grammar extends InfocomAbstractFile
     Collections.sort (preActionRoutines);
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getPadding ()
+  // ---------------------------------------------------------------------------------//
   {
     // calculate record padding size (Zork has 1 byte padding, Planetfall has 0)
     int r1 = header.getWord (indexPtr);
@@ -107,12 +123,16 @@ class Grammar extends InfocomAbstractFile
     return r2 - r1 - (sentences * SENTENCE_LENGTH) - 1;
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getRecordLength (int recordPtr)
+  // ---------------------------------------------------------------------------------//
   {
     return (buffer[recordPtr] & 0xFF) * SENTENCE_LENGTH + padding + 1;
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getTotalActions ()
+  // ---------------------------------------------------------------------------------//
   {
     // loop through each record in each index entry, and find the highest action number
     int ptr = tablePtr;
@@ -132,16 +152,18 @@ class Grammar extends InfocomAbstractFile
     return highest + 1;           // zero-based, so increment it
   }
 
-  public List<Integer> getActionRoutines ()
-  {
-    List<Integer> routines = new ArrayList<Integer> ();
-    routines.addAll (actionRoutines);
-    routines.addAll (preActionRoutines);
-    return routines;
-  }
+  //  List<Integer> getActionRoutines ()
+  //  {
+  //    List<Integer> routines = new ArrayList<> ();
+  //    routines.addAll (actionRoutines);
+  //    routines.addAll (preActionRoutines);
+  //    return routines;
+  //  }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     String line = "-----------------------------------------------------"
         + "-----------------------------------------------------------\n";
@@ -173,8 +195,8 @@ class Grammar extends InfocomAbstractFile
       text.append (line);
     }
 
-    text.append ("\n" + actionRoutines.size ()
-        + " Action routines\n===================\n\n");
+    text.append (
+        "\n" + actionRoutines.size () + " Action routines\n===================\n\n");
 
     // add sentences in action routine sequence
     for (Integer routine : actionRoutines)
@@ -199,9 +221,18 @@ class Grammar extends InfocomAbstractFile
     return text.toString ();
   }
 
-  private List<Sentence> getSentences (int routine)
+  // ---------------------------------------------------------------------------------//
+  List<SentenceGroup> getSentenceGroups ()
+  // ---------------------------------------------------------------------------------//
   {
-    List<Sentence> sentences = new ArrayList<Sentence> ();
+    return sentenceGroups;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  private List<Sentence> getSentences (int routine)
+  // ---------------------------------------------------------------------------------//
+  {
+    List<Sentence> sentences = new ArrayList<> ();
 
     for (SentenceGroup sg : sentenceGroups)
       for (Sentence s : sg.sentences)
@@ -211,7 +242,9 @@ class Grammar extends InfocomAbstractFile
     return sentences;
   }
 
+  // ---------------------------------------------------------------------------------//
   private String makeWordBlock (List<String> words)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ("[");
     if (words.size () > 0)
@@ -227,12 +260,14 @@ class Grammar extends InfocomAbstractFile
     return text.toString ();
   }
 
-  private class SentenceGroup implements Iterable<Sentence>
+  // ---------------------------------------------------------------------------------//
+  class SentenceGroup implements Iterable<Sentence>
+  // ---------------------------------------------------------------------------------//
   {
     int startPtr;
     int id;
-    List<Sentence> sentences = new ArrayList<Sentence> ();
-    String verbString; // list of synonyms inside []
+    List<Sentence> sentences = new ArrayList<> ();
+    String verbString;                          // list of synonyms inside []
 
     public SentenceGroup (int id, int ptr)
     {
@@ -263,7 +298,9 @@ class Grammar extends InfocomAbstractFile
     }
   }
 
-  private class Sentence
+  // ---------------------------------------------------------------------------------//
+  class Sentence
+  // ---------------------------------------------------------------------------------//
   {
     int startPtr;
     SentenceGroup parent;
@@ -296,7 +333,7 @@ class Grammar extends InfocomAbstractFile
 
       // get action pointer from byte 7
       actionId = buffer[startPtr + 7] & 0xFF;
-      int targetOffset = actionId * 2; // index into the action and pre-action blocks
+      int targetOffset = actionId * 2;      // index into the action and pre-action blocks
       actionRoutine = header.getWord (actionPtr + targetOffset) * 2;
       preActionRoutine = header.getWord (preActionPtr + targetOffset) * 2;
     }
@@ -318,9 +355,11 @@ class Grammar extends InfocomAbstractFile
     {
       StringBuilder text =
           new StringBuilder (String.format ("%3d  %04X  ", parent.id, startPtr));
+
       text.append (HexFormatter.getHexString (buffer, startPtr, SENTENCE_LENGTH));
       String r1 = preActionRoutine == 0 ? "" : String.format ("R:%05X", preActionRoutine);
       text.append (String.format ("  %-7s  R:%05X  %s", r1, actionRoutine, getText ()));
+
       return text.toString ();
     }
   }

@@ -4,37 +4,46 @@ import java.util.EventObject;
 
 import com.bytezone.diskbrowser.applefile.AppleFileSource;
 import com.bytezone.diskbrowser.disk.DualDosDisk;
+import com.bytezone.diskbrowser.disk.FormattedDisk;
 
-public class FileSelectedEvent extends EventObject
+// -----------------------------------------------------------------------------------//
+class FileSelectedEvent extends EventObject
+// -----------------------------------------------------------------------------------//
 {
-  public final AppleFileSource file;
+  public final AppleFileSource appleFileSource;
   boolean redo;
+  int volumeNo = -1;
 
-  public FileSelectedEvent (Object source, AppleFileSource file)
+  // ---------------------------------------------------------------------------------//
+  FileSelectedEvent (Object source, AppleFileSource appleFileSource)
+  // ---------------------------------------------------------------------------------//
   {
     super (source);
-    this.file = file;
+    this.appleFileSource = appleFileSource;
 
     // If a file is selected from a disk which is contained in a Dual-dos disk, then the DDS
     // must be told so that it can ensure its internal currentDisk is set correctly
-    DualDosDisk ddd = (DualDosDisk) file.getFormattedDisk ().getParent ();
+    FormattedDisk fd = appleFileSource.getFormattedDisk ();
+    DualDosDisk ddd = (DualDosDisk) fd.getParent ();
     if (ddd != null)
-      ddd.setCurrentDisk (file);
+    {
+      ddd.setCurrentDisk (fd);
+      volumeNo = ddd.getCurrentDiskNo ();
+    }
   }
 
+  // ---------------------------------------------------------------------------------//
+  public String toText ()
+  // ---------------------------------------------------------------------------------//
+  {
+    return appleFileSource.getUniqueName ();
+  }
+
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
-    return file.getUniqueName ();
-  }
-
-  public String toText ()
-  {
-    return file.getUniqueName ();
-  }
-
-  public static FileSelectedEvent create (Object source, AppleFileSource afs)
-  {
-    return new FileSelectedEvent (source, afs);
+    return appleFileSource.toString ();
   }
 }

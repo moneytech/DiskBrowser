@@ -1,30 +1,39 @@
 # Apple II Disk Browser
 
 ### Features
-- Applesoft and Integer Basic
-- Pascal disassembler
-- 6502 disassembler
-- Wizardry internals and maps
-- Infocom text adventure internals
-- Appleworks
-- Visicalc
-- HDV and 2mg
-- Compressed disks - shrinkIt, gzip, zip
-- Track and sector display
-- Dual DOS disks
-- DOS 4.1 disks
-- CPM disks
+- Cross-platform (Windows, MacOS, Linux)
+- Disk formats
+    - DOS
+    - Prodos
+    - Pascal
+    - CPM
+    - HDV
+    - 2mg
+    - shrinkIt, gzip, zip
+    - hybrid disks
+    - woz
+    - Unidos
+- File Formats
+    - Applesoft and Integer Basic
+    - Pascal
+    - 6502
+    - Appleworks
+    - Visicalc
+    - Graphics files 
+- Disk Internals
+    - Wizardry
+    - Infocom
+- Track / Sector / Block display
 - Comprehensive disk listing
-- woz format disks
 
 ### Documentation
 * [Usage](resources/usage.md)
-* [Project layout](resources/structure.md)
 
 ### Installation
-* Install the **latest** version of the [Java Runtime Environment](http://www.oracle.com/technetwork/java/javase/downloads/index.html) (JRE or JDK).
+* Install the **latest** version of the [JDK](http://www.oracle.com/technetwork/java/javase/downloads/index.html).
 * Download DiskBrowser.jar from the [releases](https://github.com/dmolony/diskbrowser/releases) page.
 * Double-click the jar file, or enter 'java -jar DiskBrowser.jar' in the terminal.
+* Set your root folder (the top-level folder where you keep your disk images).
 
 ### Example Screens
 #### Disk listing
@@ -36,14 +45,15 @@ Double-click a disk from the Disk Tree tab and a new tab appears. This tab conta
 #### Detailed sector display
 Click on any sector in the Disk Layout panel and the Output panel will display the contents of that sector. If it is a recognised sector type, it will be formatted for easier reading.
 ![Sector details](resources/sector.png?raw=true "Sector details")
-#### Hard disk
-![Hard disk](resources/disk3.png?raw=true "Hard disk")
+#### Cross-platform
+Java runs on Windows, MacOS and Linux.
+![Windows](resources/windows.png?raw=true "Windows")
+#### Graphics 
+![Graphics](resources/graphics.png?raw=true "Graphics")
 #### Pascal code
 ![Pascal](resources/pascal.png?raw=true "Pascal")
 #### Infocom
 ![Infocom](resources/zork.png?raw=true "Infocom")
-#### Graphics 
-![Graphics](resources/planetfall.png?raw=true "Graphics")
 #### Wizardry
 ![Wizardry](resources/wizardry.png?raw=true "Wizardry")
 #### Visicalc

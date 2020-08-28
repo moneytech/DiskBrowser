@@ -8,21 +8,33 @@ import java.nio.file.Files;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 
-import com.bytezone.common.DefaultAction;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
+import com.bytezone.diskbrowser.utilities.DefaultAction;
 
-public class SaveTempFileAction extends DefaultAction
+// -----------------------------------------------------------------------------------//
+class SaveTempFileAction extends DefaultAction
+// -----------------------------------------------------------------------------------//
 {
   FormattedDisk disk;
 
-  public SaveTempFileAction ()
+  // ---------------------------------------------------------------------------------//
+  SaveTempFileAction ()
+  // ---------------------------------------------------------------------------------//
   {
-    super ("Save converted file...", "Save converted file");
+    super ("Save converted disk...", "Save converted disk");
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void actionPerformed (ActionEvent evt)
+  // ---------------------------------------------------------------------------------//
   {
+    if (disk == null)
+    {
+      System.out.println ("No disk");
+      return;
+    }
+
     JFileChooser fileChooser = new JFileChooser ();
     fileChooser.setDialogTitle ("Save converted disk");
     String name = disk.getName ();
@@ -42,8 +54,11 @@ public class SaveTempFileAction extends DefaultAction
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   void setDisk (FormattedDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     this.disk = disk;
+    this.setEnabled (true);
   }
 }

@@ -1,6 +1,7 @@
 package com.bytezone.diskbrowser.applefile;
 
 import java.awt.Color;
+import java.awt.image.DataBuffer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.List;
@@ -9,48 +10,106 @@ import javax.imageio.ImageIO;
 
 import com.bytezone.diskbrowser.prodos.ProdosConstants;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public abstract class HiResImage extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
-  //  File Type   Aux     Name
-  //   $06 BIN                 isGif()               - OriginalHiResImage
-  //   $06 BIN                 isPng()               - OriginalHiResImage
-  //   $06 BIN          .BMP   isBmp()               - OriginalHiResImage
-  //   $06 BIN          .AUX                         - DoubleHiResImage
-  //   $06 BIN          .PAC                         - DoubleHiResImage
-  //   $06 BIN          .A2FC                        - DoubleHiResImage
-  //   $06 BIN   $2000  eof $4000                    - DoubleHiResImage
-  //   $06 BIN   $1FFF  eof $1FF8/$1FFF/$2000/$4000  - OriginalHiResImage
-  //   $06 BIN   $2000  eof $1FF8/$1FFF/$2000/$4000  - OriginalHiResImage
-  //   $06 BIN   $4000  eof $1FF8/$1FFF/$2000/$4000  - OriginalHiResImage
-  //   $06 BIN          .3200                        - SHRPictureFile2
-  //   $06 BIN          .3201                        - SHRPictureFile2
+  static final String[] auxTypes =
+      { "Paintworks Packed SHR Image", "Packed Super Hi-Res Image",
+        "Super Hi-Res Image (Apple Preferred Format)", "Packed QuickDraw II PICT File",
+        "Packed Super Hi-Res 3200 color image" };
+  static final int COLOR_TABLE_SIZE = 32;
+  static final int COLOR_TABLE_OFFSET_AUX_0 = 32_256;
+  static final int COLOR_TABLE_OFFSET_AUX_2 = 32_000;
+  public static final int FADDEN_AUX = 0x8066;
+  private byte[] fourBuf = new byte[4];
+  private ColorTable defaultColorTable320 = new ColorTable (0, 0x00);
+  private ColorTable defaultColorTable640 = new ColorTable (0, 0x80);
 
-  //   $08 FOT  <$4000  Apple II Graphics File       -       ???
-  //   $08 FOT   $4000  Packed Hi-Res file           -       ???
-  //   $08 FOT   $4001  Packed Double Hi-Res file    -       ???
-  //   $08 FOT   $8066  Fadden Hi-res                - FaddenHiResImage
-
-  // * $C0 PNT   $0000  Paintworks Packed Super Hi-Res           - SHRPictureFile2 
-  // * $C0 PNT   $0001  Packed IIGS Super Hi-Res Image           - SHRPictureFile2 
-  // * $C0 PNT   $0002  IIGS Super Hi-Res Picture File (APF)     - SHRPictureFile
-  //   $C0 PNT   $0003  Packed IIGS QuickDraw II PICT File       - SHRPictureFile2 *
-  // * $C0 PNT   $0004  Packed Super Hi-Res 3200 (Brooks) .3201  - SHRPictureFile2 
+  //  ---- ---- ------  --------------------------------------  ------------------------
+  //  File Type  Aux    Name                                    Description
+  //  ---- ---- ------  --------------------------------------  ------------------------
+  //   $06 BIN                 isGif()                          OriginalHiResImage
+  //   $06 BIN                 isPng()                          OriginalHiResImage
+  //   $06 BIN          .BMP   isBmp()                          OriginalHiResImage
+  //   $06 BIN          .AUX                                    DoubleHiResImage
+  //   $06 BIN          .PAC                                    DoubleHiResImage
+  //   $06 BIN          .A2FC                                   DoubleHiResImage
+  //   $06 BIN   $2000  eof $4000                               DoubleHiResImage
+  //   $06 BIN   $1FFF  eof $1FF8/$1FFF/$2000/$4000             OriginalHiResImage
+  //   $06 BIN   $2000  eof $1FF8/$1FFF/$2000/$4000             OriginalHiResImage
+  //   $06 BIN   $4000  eof $1FF8/$1FFF/$2000/$4000             OriginalHiResImage (?)
+  //   $06 BIN   $4000  eof $4000                               DoubleHiResImage   (?)
+  //   $06 BIN          .3200                                   SHRPictureFile2
+  //   $06 BIN          .3201                                   SHRPictureFile2 packed
+  //  ---- ---- ------  --------------------------------------  ------------------------
+  //   $08 FOT  <$4000  Apple II Graphics File                  OriginalHiResImage
+  //   $08 FOT   $4000  Packed Hi-Res file                            ???
+  //   $08 FOT   $4001  Packed Double Hi-Res file                     ???
+  //   $08 FOT   $8066  Fadden Hi-res                           FaddenHiResImage
+  //  ---- ---- ------  --------------------------------------  ------------------------
+  // * $C0 PNT   $0000  Paintworks Packed Super Hi-Res          SHRPictureFile2
+  // * $C0 PNT   $0001  Packed IIGS Super Hi-Res Image          SHRPictureFile2
+  // * $C0 PNT   $0002  IIGS Super Hi-Res Picture File (APF)    SHRPictureFile1
+  //   $C0 PNT   $0003  Packed IIGS QuickDraw II PICT File      SHRPictureFile2 *
+  // * $C0 PNT   $0004  Packed Super Hi-Res 3200 (Brooks)       SHRPictureFile2 .3201
   //   $C0 PNT   $1000
-  //   $C0 PNT   $8000  Drawplus ?
+  //   $C0 PNT   $8000  Drawplus? Paintworks Gold?
   //   $C0 PNT   $8001  GTv background picture
   //   $C0 PNT   $8005  DreamGraphix document
   //   $C0 PNT   $8006  GIF
-
-  // * $C1 PIC   $0000  IIGS Super Hi-Res Image                  - SHRPictureFile2
-  //   $C1 PIC   $0001  IIGS QuickDraw II PICT File              - SHRPictureFile2 *
-  // * $C1 PIC   $0002  Super Hi-Res 3200 (Brooks) .3200         - SHRPictureFile2
+  //  ---- ---- ------  --------------------------------------  ------------------------
+  // * $C1 PIC   $0000  IIGS Super Hi-Res Image                 SHRPictureFile2
+  //   $C1 PIC   $0001  IIGS QuickDraw II PICT File             SHRPictureFile2 *
+  // * $C1 PIC   $0002  Super Hi-Res 3200 (Brooks)              SHRPictureFile2 .3200
+  //   $C1 PIC   $2000  = $C1/0000
+  //   $C1 PIC   $4100  = $C1/0000
+  //   $C1 PIC   $4950  = $C1/0000
   //   $C1 PIC   $8001  Allison raw image
   //   $C1 PIC   $8002  Thunderscan
   //   $C1 PIC   $8003  DreamGraphix
-
+  //  ---- ---- ------  --------------------------------------  ------------------------
   //   $C2 ANI          Paintworks animation
   //   $C3 PAL          Paintworks palette
+  //  ---- ---- ------  --------------------------------------  ------------------------
+
+  // packed      unpacked
+  // $06.3200                  1
+  // $06.3201                  .
+  // $08 0000                  .
+  // $08 4000                  .
+  // $08 4001                  .
+  // $08 8066                  3
+  // $C0 0000                  1
+  // $C0 0001    $C1 0000      2     1
+  // $C0 0002                  1,5
+  // $C0 0003    $C1 0001      .     .
+  // $C0 0004    $C1 0002      .     1
+  // $C0 1000                  .
+  // $C0 8000                  .
+  // $C0 8001                  .
+  // $C0 8005                  .
+  // $C0 8006                  .
+  // $C1 0042                  4
+  // $C1 0043                  4
+  // $C1 2000                  .
+  // $C1 4100                  1
+  // $C1 4950                  .
+  // $C1 8001                  .
+  // $C1 8002                  .
+  // $C1 8003                  .
+
+  // 1 Graphics & Animation.2mg
+  // 2 0603 Katie's Farm - Disk 2.po
+  // 3 CompressedSlides.do
+  // 4 System Addons.hdv
+  // 5 gfx.po
+  //
+
+  // see also - https://docs.google.com/spreadsheets/d
+  //           /1rKR6A_bVniSCtIP_rrv8QLWJdj4h6jEU1jJj0AebWwg/edit#gid=0
 
   static PaletteFactory paletteFactory = new PaletteFactory ();
 
@@ -67,17 +126,23 @@ public abstract class HiResImage extends AbstractFile
   int paletteIndex;
   String failureReason = "";
 
+  // ---------------------------------------------------------------------------------//
   public HiResImage (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
   }
 
+  // ---------------------------------------------------------------------------------//
   public HiResImage (String name, byte[] buffer, int loadAddress)
+  // ---------------------------------------------------------------------------------//
   {
     this (name, buffer, loadAddress, false);
   }
 
+  // ---------------------------------------------------------------------------------//
   public HiResImage (String name, byte[] buffer, int loadAddress, boolean scrunched)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -87,7 +152,9 @@ public abstract class HiResImage extends AbstractFile
       this.buffer = unscrunch (buffer);
   }
 
+  // ---------------------------------------------------------------------------------//
   public HiResImage (String name, byte[] buffer, int fileType, int auxType, int eof)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -96,34 +163,55 @@ public abstract class HiResImage extends AbstractFile
     this.eof = eof;
   }
 
-  protected void createImage ()
+  // ---------------------------------------------------------------------------------//
+  public boolean isAnimation ()
+  // ---------------------------------------------------------------------------------//
   {
-    if (failureReason.isEmpty ())
-      if (isGif (buffer) || isPng (buffer) || isBmp (buffer))
-        makeImage ();
-      else if (monochrome)
-        createMonochromeImage ();
-      else
-        createColourImage ();
+    return fileType == ProdosConstants.FILE_TYPE_ANI;
   }
 
+  // ---------------------------------------------------------------------------------//
+  protected void createImage ()
+  // ---------------------------------------------------------------------------------//
+  {
+    if (!failureReason.isEmpty ())
+      return;
+
+    if (isGif (buffer) || isPng (buffer) || isBmp (buffer) || isTiff (buffer))
+      makeImage ();
+    else if (monochrome)
+      createMonochromeImage ();
+    else
+      createColourImage ();
+  }
+
+  // ---------------------------------------------------------------------------------//
   abstract void createMonochromeImage ();
+  // ---------------------------------------------------------------------------------//
 
+  // ---------------------------------------------------------------------------------//
   abstract void createColourImage ();
+  // ---------------------------------------------------------------------------------//
 
+  // ---------------------------------------------------------------------------------//
   public void checkPalette ()
+  // ---------------------------------------------------------------------------------//
   {
     if (!monochrome && paletteIndex != paletteFactory.getCurrentPaletteIndex ())
       createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setPalette ()
+  // ---------------------------------------------------------------------------------//
   {
     if (!monochrome)
       createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setColourQuirks (boolean value)
+  // ---------------------------------------------------------------------------------//
   {
     if (colourQuirks == value)
       return;
@@ -134,7 +222,9 @@ public abstract class HiResImage extends AbstractFile
       createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setMonochrome (boolean value)
+  // ---------------------------------------------------------------------------------//
   {
     if (monochrome == value)
       return;
@@ -143,24 +233,29 @@ public abstract class HiResImage extends AbstractFile
     createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public static void setDefaultColourQuirks (boolean value)
+  // ---------------------------------------------------------------------------------//
   {
     colourQuirks = value;
   }
 
+  // ---------------------------------------------------------------------------------//
   public static void setDefaultMonochrome (boolean value)
+  // ---------------------------------------------------------------------------------//
   {
     monochrome = value;
   }
 
+  // byte +120 is the first screen hole
   /*-
-   * Files of type $08 and any auxiliary type less than or equal to $3FFF contain a 
-   * standard Apple II graphics file in one of several modes. After determining that 
-   * the auxiliary type is not $4000 or $4001 (which have been defined for high-resolution 
-   * and double high-resolution pictures packed with the Apple IIGS PackBytes routine), 
-   * you can determine the mode of the file by examining byte +120 (+$78). The value of 
+   * Files of type $08 and any auxiliary type less than or equal to $3FFF contain a
+   * standard Apple II graphics file in one of several modes. After determining that
+   * the auxiliary type is not $4000 or $4001 (which have been defined for high-resolution
+   * and double high-resolution pictures packed with the Apple IIGS PackBytes routine),
+   * you can determine the mode of the file by examining byte +120 (+$78). The value of
    * this byte, which ranges from zero to seven, is interpreted as follows:
-   * 
+   *
      Mode                        Page 1    Page 2
      280 x 192 Black & White       0         4
      280 x 192 Limited Color       1         5
@@ -170,8 +265,12 @@ public abstract class HiResImage extends AbstractFile
 
   // SHR see - http://noboot.com/charlie/cb2e_p3.htm
 
+  // also: https://groups.google.com/forum/#!topic/comp.sys.apple2/zYhZ5YdNNxQ
+
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     String auxText = "";
     StringBuilder text = new StringBuilder ();
@@ -191,39 +290,23 @@ public abstract class HiResImage extends AbstractFile
           auxText = "Packed Hi-Res File";
         else if (auxType == 0x4001)
           auxText = "Packed Double Hi-Res File";
-        else if (auxType == 0x8066)
+        else if (auxType == FADDEN_AUX)
           auxText = "Fadden Hi-Res File";
         else
           auxText = "Unknown aux: " + auxType;
         break;
 
       case ProdosConstants.FILE_TYPE_PNT:           // 0xC0
-        switch (auxType)
-        {
-          case 0:
-            auxText = "Paintworks Packed SHR Image";
-            break;
-          case 1:
-            auxText = "Packed Super Hi-Res Image";
-            break;
-          case 2:
-            auxText = "Super Hi-Res Image (Apple Preferred Format)";
-            break;
-          case 3:
-            auxText = "Packed QuickDraw II PICT File";
-            break;
-          case 4:
-            auxText = "Packed Super Hi-Res 3200 color image";
-            break;
-          default:
-            auxText = "Unknown aux: " + auxType;
-        }
+        auxText = auxType > 4 ? "Unknown aux: " + auxType : auxTypes[auxType];
         break;
 
       case ProdosConstants.FILE_TYPE_PIC:           // 0xC1
         switch (auxType)
         {
           case 0:
+          case 0x2000:
+          case 0x0042:
+          case 0x0043:
             auxText = "Super Hi-res Screen Image";
             break;
           case 1:
@@ -249,73 +332,184 @@ public abstract class HiResImage extends AbstractFile
     return text.toString ();
   }
 
-  /*
-  * Unpack the Apple PackBytes format.
-  *
-  * Format is:
-  *  <flag><data> ...
-  *
-  * Flag values (first 6 bits of flag byte):
-  *  00xxxxxx: (0-63) 1 to 64 bytes follow, all different
-  *  01xxxxxx: (0-63) 1 to 64 repeats of next byte
-  *  10xxxxxx: (0-63) 1 to 64 repeats of next 4 bytes
-  *  11xxxxxx: (0-63) 1 to 64 repeats of next byte taken as 4 bytes
-  *              (as in 10xxxxxx case)
-  */
-
-  // this should call unpackLine()
-  byte[] unpack (byte[] buffer) throws ArrayIndexOutOfBoundsException
+  // ---------------------------------------------------------------------------------//
+  int mode320Line (int ptr, int element, int dataWidth, ColorTable colorTable,
+      DataBuffer dataBuffer, int imageWidth)
+  // ---------------------------------------------------------------------------------//
   {
-    // routine found here - http://kpreid.livejournal.com/4319.html
+    if (colorTable == null)
+      colorTable = defaultColorTable320;
 
-    byte[] newBuf = new byte[calculateBufferSize (buffer)];
-    byte[] fourBuf = new byte[4];
-
-    int ptr = 0, newPtr = 0;
-    while (ptr < buffer.length)
+    for (int i = 0; i < dataWidth; i++)
     {
-      int type = (buffer[ptr] & 0xC0) >> 6;         // 0-3
+      if (ptr >= buffer.length)
+      {
+        System.out.printf ("too big: %d  %d%n", ptr, buffer.length);
+        return ptr;
+      }
+      // get two pixels from this byte
+      int left = (buffer[ptr] & 0xF0) >>> 4;
+      int right = buffer[ptr++] & 0x0F;
+
+      // get pixel colors
+      int rgbLeft = colorTable.entries[left].color.getRGB ();
+      int rgbRight = colorTable.entries[right].color.getRGB ();
+
+      // draw two pixels (twice each) on two lines
+      draw (dataBuffer, element + imageWidth, rgbLeft, rgbLeft, rgbRight, rgbRight);
+      element = draw (dataBuffer, element, rgbLeft, rgbLeft, rgbRight, rgbRight);
+    }
+
+    return ptr;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  int mode640Line (int ptr, int element, int dataWidth, ColorTable colorTable,
+      DataBuffer dataBuffer, int imageWidth)
+  // ---------------------------------------------------------------------------------//
+  {
+    if (colorTable == null)
+      colorTable = defaultColorTable640;
+
+    for (int i = 0; i < dataWidth; i++)
+    {
+      // get four pixels from this byte
+      int p1 = (buffer[ptr] & 0xC0) >>> 6;
+      int p2 = (buffer[ptr] & 0x30) >> 4;
+      int p3 = (buffer[ptr] & 0x0C) >> 2;
+      int p4 = (buffer[ptr++] & 0x03);
+
+      // get pixel colors
+      int rgb1 = colorTable.entries[p1 + 8].color.getRGB ();
+      int rgb2 = colorTable.entries[p2 + 12].color.getRGB ();
+      int rgb3 = colorTable.entries[p3].color.getRGB ();
+      int rgb4 = colorTable.entries[p4 + 4].color.getRGB ();
+
+      // draw four pixels on two lines
+      draw (dataBuffer, element + imageWidth, rgb1, rgb2, rgb3, rgb4);    // 2nd line
+      element = draw (dataBuffer, element, rgb1, rgb2, rgb3, rgb4);       // 1st line
+    }
+
+    return ptr;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  int draw (DataBuffer dataBuffer, int element, int... rgbList)
+  // ---------------------------------------------------------------------------------//
+  {
+    if (dataBuffer.getSize () < rgbList.length + element)
+    {
+      System.out.printf ("Bollocks: %d %d %d%n", dataBuffer.getSize (), rgbList.length,
+          element);
+      return element;
+    }
+
+    for (int rgb : rgbList)
+      dataBuffer.setElem (element++, rgb);
+
+    return element;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  int unpack (byte[] buffer, int ptr, int max, byte[] newBuf, int newPtr)
+  // ---------------------------------------------------------------------------------//
+  {
+    int savePtr = newPtr;
+
+    while (ptr < max - 1)                 // minimum 2 bytes needed
+    {
+      int type = (buffer[ptr] & 0xC0) >>> 6;        // 0-3
       int count = (buffer[ptr++] & 0x3F) + 1;       // 1-64
 
       switch (type)
       {
-        case 0:                           // copy next 1-64 bytes as is
-          while (count-- != 0)
+        case 0:                                     // 2-65 bytes
+          while (count-- != 0 && newPtr < newBuf.length && ptr < max)
             newBuf[newPtr++] = buffer[ptr++];
           break;
 
-        case 1:                          // repeat next byte 3/5/6/7 times
+        case 1:                                     // 2 bytes
           byte b = buffer[ptr++];
-          while (count-- != 0)
+          while (count-- != 0 && newPtr < newBuf.length)
             newBuf[newPtr++] = b;
           break;
 
-        case 2:                          // repeat next 4 bytes (count) times
+        case 2:                                     // 5 bytes
           for (int i = 0; i < 4; i++)
-            fourBuf[i] = buffer[ptr++];
+            fourBuf[i] = ptr < max ? buffer[ptr++] : 0;
+
           while (count-- != 0)
             for (int i = 0; i < 4; i++)
-              newBuf[newPtr++] = fourBuf[i];
+              if (newPtr < newBuf.length)
+                newBuf[newPtr++] = fourBuf[i];
           break;
 
-        case 3:                          // repeat next byte (4*count) times
+        case 3:                                     // 2 bytes
           b = buffer[ptr++];
           count *= 4;
-          while (count-- != 0)
+          while (count-- != 0 && newPtr < newBuf.length)
             newBuf[newPtr++] = b;
           break;
       }
     }
-    return newBuf;
+
+    return newPtr - savePtr;          // bytes unpacked
   }
 
-  private int calculateBufferSize (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  String debug (byte[] buffer, int ptr, int length)
+  // ---------------------------------------------------------------------------------//
   {
-    int ptr = 0;
+    int size = 0;
+    int max = ptr + length;
+    StringBuffer text = new StringBuffer ();
+
+    while (ptr < max)
+    {
+      int type = (buffer[ptr] & 0xC0) >>> 6;        // 0-3
+      int count = (buffer[ptr++] & 0x3F) + 1;       // 1-64
+
+      text.append (String.format ("%04X/%04d: %02X  (%d,%2d)  ", ptr - 1, size,
+          buffer[ptr - 1], type, count));
+
+      if (type == 0)
+      {
+        text.append (
+            String.format ("%s%n", HexFormatter.getHexString (buffer, ptr, count)));
+        ptr += count;
+        size += count;
+      }
+      else if (type == 1)
+      {
+        text.append (String.format ("%s%n", HexFormatter.getHexString (buffer, ptr, 1)));
+        ptr++;
+        size += count;
+      }
+      else if (type == 2)
+      {
+        text.append (String.format ("%s%n", HexFormatter.getHexString (buffer, ptr, 4)));
+        ptr += 4;
+        size += count * 4;
+      }
+      else
+      {
+        text.append (String.format ("%s%n", HexFormatter.getHexString (buffer, ptr, 1)));
+        ptr++;
+        size += count * 4;
+      }
+    }
+    return text.toString ();
+  }
+
+  // ---------------------------------------------------------------------------------//
+  int calculateBufferSize (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    //    int ptr = 0;
     int size = 0;
     while (ptr < buffer.length)
     {
-      int type = (buffer[ptr] & 0xC0) >> 6;         // 0-3
+      int type = (buffer[ptr] & 0xC0) >>> 6;        // 0-3
       int count = (buffer[ptr++] & 0x3F) + 1;       // 1-64
 
       if (type == 0)
@@ -342,62 +536,10 @@ public abstract class HiResImage extends AbstractFile
     return size;
   }
 
-  // Super Hi-res IIGS (MAIN in $C0/02)
-  int unpackLine (byte[] buffer, byte[] newBuf, int newPtr)
-  {
-    byte[] fourBuf = new byte[4];
-
-    int oldPtr = newPtr;
-    int ptr = 0;
-    while (ptr < buffer.length)
-    {
-      int type = (buffer[ptr] & 0xC0) >> 6;         // 0-3
-      int count = (buffer[ptr++] & 0x3F) + 1;       // 1-64
-
-      if (ptr >= buffer.length)       // needed for NAGELxx
-        break;
-
-      switch (type)
-      {
-        case 0:
-          while (count-- != 0)
-            if (newPtr < newBuf.length && ptr < buffer.length)
-              newBuf[newPtr++] = buffer[ptr++];
-          break;
-
-        case 1:
-          byte b = buffer[ptr++];
-          while (count-- != 0)
-            if (newPtr < newBuf.length)
-              newBuf[newPtr++] = b;
-          break;
-
-        case 2:
-          for (int i = 0; i < 4; i++)
-            if (ptr < buffer.length)
-              fourBuf[i] = buffer[ptr++];
-          while (count-- != 0)
-            for (int i = 0; i < 4; i++)
-              if (newPtr < newBuf.length)
-                newBuf[newPtr++] = fourBuf[i];
-          break;
-
-        case 3:
-          b = buffer[ptr++];
-          count *= 4;
-          while (count-- != 0)
-            if (newPtr < newBuf.length)
-              newBuf[newPtr++] = b;
-          break;
-      }
-    }
-    //    System.out.println (HexFormatter.format (newBuf, oldPtr, newPtr - oldPtr));
-
-    return newPtr;
-  }
-
   // Beagle Bros routine to expand a hi-res screen
+  // ---------------------------------------------------------------------------------//
   private byte[] unscrunch (byte[] src)
+  // ---------------------------------------------------------------------------------//
   {
     byte[] dst = new byte[0x2000];
     int p1 = 0;
@@ -419,7 +561,9 @@ public abstract class HiResImage extends AbstractFile
     return dst;
   }
 
+  // ---------------------------------------------------------------------------------//
   protected void makeImage ()
+  // ---------------------------------------------------------------------------------//
   {
     try
     {
@@ -438,7 +582,9 @@ public abstract class HiResImage extends AbstractFile
 
   // http://commandlinefanatic.com/cgi-bin/showarticle.cgi?article=art011
   // https://www.w3.org/Graphics/GIF/spec-gif89a.txt
+  // ---------------------------------------------------------------------------------//
   public static boolean isGif (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer.length < 6)
       return false;
@@ -447,7 +593,9 @@ public abstract class HiResImage extends AbstractFile
     return text.equals ("GIF89a") || text.equals ("GIF87a");
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean isPng (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer.length < pngHeader.length)
       return false;
@@ -459,22 +607,38 @@ public abstract class HiResImage extends AbstractFile
     return true;
   }
 
+  // ---------------------------------------------------------------------------------//
+  public static boolean isTiff (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  {
+    if (buffer.length < 3)
+      return false;
+    String text = new String (buffer, 0, 2);
+    if (!"II".equals (text) && !"MM".equals (text))
+      return false;
+    if (buffer[2] != 0x2A)
+      return false;
+    return true;
+  }
+
   // http://www.daubnet.com/en/file-format-bmp
+  // ---------------------------------------------------------------------------------//
   public static boolean isBmp (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer.length < 26)
       return false;
 
     String text = new String (buffer, 0, 2);
-    int size = HexFormatter.unsignedLong (buffer, 2);
+    int size = Utility.unsignedLong (buffer, 2);
 
     if (false)
     {
-      int empty = HexFormatter.unsignedLong (buffer, 6);
-      int offset = HexFormatter.unsignedLong (buffer, 10);
-      int header = HexFormatter.unsignedLong (buffer, 14);
-      int width = HexFormatter.unsignedLong (buffer, 18);
-      int height = HexFormatter.unsignedLong (buffer, 22);
+      int empty = Utility.unsignedLong (buffer, 6);
+      int offset = Utility.unsignedLong (buffer, 10);
+      int header = Utility.unsignedLong (buffer, 14);
+      int width = Utility.unsignedLong (buffer, 18);
+      int height = Utility.unsignedLong (buffer, 22);
 
       System.out.println (buffer.length);
       System.out.println (size);
@@ -488,38 +652,92 @@ public abstract class HiResImage extends AbstractFile
     return text.equals ("BM") && size <= buffer.length;
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean isAPP (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer.length < 4)
       return false;
+
     return buffer[0] == (byte) 0xC1 && buffer[1] == (byte) 0xD0
         && buffer[2] == (byte) 0xD0 && buffer[3] == 0;
   }
 
+  // ---------------------------------------------------------------------------------//
   public static PaletteFactory getPaletteFactory ()
+  // ---------------------------------------------------------------------------------//
   {
     return paletteFactory;
   }
 
+  // ---------------------------------------------------------------------------------//
   public static List<Palette> getPalettes ()
+  // ---------------------------------------------------------------------------------//
   {
     return paletteFactory.getPalettes ();
   }
 
+  // ---------------------------------------------------------------------------------//
   class ColorTable
+  // ---------------------------------------------------------------------------------//
   {
-    int id;
+    private int id;
     ColorEntry[] entries = new ColorEntry[16];
 
-    public ColorTable ()
+    // -------------------------------------------------------------------------------//
+    public ColorTable (int id, int mode)
+    // -------------------------------------------------------------------------------//
     {
       // default empty table
-      id = -1;
-      for (int i = 0; i < 16; i++)
-        entries[i] = new ColorEntry ();
+      this.id = id;
+
+      if ((mode & 0x80) == 0)
+      {
+        entries[0] = new ColorEntry (0x00, 0x00, 0x00);
+        entries[1] = new ColorEntry (0x07, 0x07, 0x07);
+        entries[2] = new ColorEntry (0x08, 0x04, 0x01);
+        entries[3] = new ColorEntry (0x07, 0x02, 0x0C);
+        entries[4] = new ColorEntry (0x00, 0x00, 0x0F);
+        entries[5] = new ColorEntry (0x00, 0x08, 0x00);
+        entries[6] = new ColorEntry (0x0F, 0x07, 0x00);
+        entries[7] = new ColorEntry (0x0D, 0x00, 0x00);
+
+        entries[8] = new ColorEntry (0x0F, 0x0A, 0x09);
+        entries[9] = new ColorEntry (0x0F, 0x0F, 0x00);
+        entries[10] = new ColorEntry (0x00, 0x0E, 0x00);
+        entries[11] = new ColorEntry (0x04, 0x0D, 0x0F);
+        entries[12] = new ColorEntry (0x0D, 0x0A, 0x0F);
+        entries[13] = new ColorEntry (0x07, 0x08, 0x0F);
+        entries[14] = new ColorEntry (0x0C, 0x0C, 0x0C);
+        entries[15] = new ColorEntry (0x0F, 0x0F, 0x0F);
+      }
+      else
+      {
+        entries[0] = new ColorEntry (0x00, 0x00, 0x00);
+        entries[1] = new ColorEntry (0x00, 0x00, 0x0F);
+        entries[2] = new ColorEntry (0x0F, 0x0F, 0x00);
+        entries[3] = new ColorEntry (0x0F, 0x0F, 0x0F);
+
+        entries[4] = new ColorEntry (0x00, 0x00, 0x00);
+        entries[5] = new ColorEntry (0x0D, 0x00, 0x00);
+        entries[6] = new ColorEntry (0x00, 0x0E, 0x00);
+        entries[7] = new ColorEntry (0x0F, 0x0F, 0x0F);
+
+        entries[0] = new ColorEntry (0x00, 0x00, 0x00);
+        entries[1] = new ColorEntry (0x00, 0x00, 0x0F);
+        entries[2] = new ColorEntry (0x0F, 0x0F, 0x00);
+        entries[3] = new ColorEntry (0x0F, 0x0F, 0x0F);
+
+        entries[4] = new ColorEntry (0x00, 0x00, 0x00);
+        entries[5] = new ColorEntry (0x0D, 0x00, 0x00);
+        entries[6] = new ColorEntry (0x00, 0x0E, 0x00);
+        entries[7] = new ColorEntry (0x0F, 0x0F, 0x0F);
+      }
     }
 
+    // -------------------------------------------------------------------------------//
     public ColorTable (int id, byte[] data, int offset)
+    // -------------------------------------------------------------------------------//
     {
       this.id = id;
       for (int i = 0; i < 16; i++)
@@ -529,7 +747,9 @@ public abstract class HiResImage extends AbstractFile
       }
     }
 
+    // -------------------------------------------------------------------------------//
     String toLine ()
+    // -------------------------------------------------------------------------------//
     {
 
       StringBuilder text = new StringBuilder ();
@@ -541,7 +761,9 @@ public abstract class HiResImage extends AbstractFile
       return text.toString ();
     }
 
+    // -------------------------------------------------------------------------------//
     void reverse ()
+    // -------------------------------------------------------------------------------//
     {
       for (int i = 0; i < 8; i++)
       {
@@ -551,12 +773,14 @@ public abstract class HiResImage extends AbstractFile
       }
     }
 
+    // -------------------------------------------------------------------------------//
     @Override
     public String toString ()
+    // -------------------------------------------------------------------------------//
     {
       StringBuilder text = new StringBuilder ();
 
-      text.append (String.format ("%2d ColorTable%n", id));
+      text.append (String.format ("%3d ColorTable%n", id));
       for (int i = 0; i < 8; i++)
         text.append (String.format ("  %2d: %04X", i, entries[i].value));
       text.append ("\n");
@@ -567,21 +791,26 @@ public abstract class HiResImage extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   class ColorEntry
+  // ---------------------------------------------------------------------------------//
   {
     int value;          // 0RGB
     Color color;
 
-    public ColorEntry ()
+    // -------------------------------------------------------------------------------//
+    public ColorEntry (int red, int green, int blue)
+    // -------------------------------------------------------------------------------//
     {
-      // default empty entry
-      value = 0;
-      color = new Color (0, 0, 0);
+      value = (red << 8) | (green << 4) | blue;
+      color = new Color (red, green, blue);
     }
 
+    // -------------------------------------------------------------------------------//
     public ColorEntry (byte[] data, int offset)
+    // -------------------------------------------------------------------------------//
     {
-      value = HexFormatter.unsignedShort (data, offset);
+      value = Utility.unsignedShort (data, offset);
 
       int red = ((value >> 8) & 0x0f) * 17;
       int green = ((value >> 4) & 0x0f) * 17;
@@ -590,26 +819,34 @@ public abstract class HiResImage extends AbstractFile
       color = new Color (red, green, blue);
     }
 
+    // -------------------------------------------------------------------------------//
     @Override
     public String toString ()
+    // -------------------------------------------------------------------------------//
     {
       return String.format ("ColorEntry: %04X", value);
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   class DirEntry
+  // ---------------------------------------------------------------------------------//
   {
     int numBytes;
     int mode;
 
+    // -------------------------------------------------------------------------------//
     public DirEntry (byte[] data, int offset)
+    // -------------------------------------------------------------------------------//
     {
-      numBytes = HexFormatter.unsignedShort (data, offset);
-      mode = HexFormatter.unsignedShort (data, offset + 2);
+      numBytes = Utility.unsignedShort (data, offset);
+      mode = Utility.unsignedShort (data, offset + 2);
     }
 
+    // -------------------------------------------------------------------------------//
     @Override
     public String toString ()
+    // -------------------------------------------------------------------------------//
     {
       return String.format ("Bytes: %5d, mode: %02X", numBytes, mode);
     }

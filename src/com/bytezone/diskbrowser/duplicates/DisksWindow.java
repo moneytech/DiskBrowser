@@ -12,7 +12,15 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.swing.*;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.JTableHeader;
@@ -23,7 +31,9 @@ import com.bytezone.diskbrowser.gui.DuplicateAction.DiskTableSelectionListener;
 import com.bytezone.diskbrowser.utilities.NumberRenderer;
 import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class DisksWindow extends JFrame
+// -----------------------------------------------------------------------------------//
 {
   private final JTable table;
 
@@ -33,7 +43,7 @@ public class DisksWindow extends JFrame
   private final JButton btnTotals = new JButton ("Totals");
   private final JPanel topPanel = new JPanel ();
 
-  private final List<JCheckBox> boxes = new ArrayList<JCheckBox> ();
+  private final List<JCheckBox> boxes = new ArrayList<> ();
   private TableRowSorter<DiskTableModel> sorter;
   private final CheckBoxActionListener checkBoxActionListener =
       new CheckBoxActionListener ();
@@ -42,7 +52,9 @@ public class DisksWindow extends JFrame
   private final RootFolderData rootFolderData;
   private final DeleteWindow deleteWindow;
 
+  // ---------------------------------------------------------------------------------//
   public DisksWindow (RootFolderData rootFolderData)
+  // ---------------------------------------------------------------------------------//
   {
     super (rootFolderData.getRootFolderPathText ());
     this.rootFolderData = rootFolderData;
@@ -115,7 +127,9 @@ public class DisksWindow extends JFrame
   }
 
   // called from DuplicateSwingWorker
+  // ---------------------------------------------------------------------------------//
   public void setTableData (final RootFolderData rootFolderData)
+  // ---------------------------------------------------------------------------------//
   {
     diskTableModel = new DiskTableModel (rootFolderData);
     table.setModel (diskTableModel);
@@ -201,7 +215,9 @@ public class DisksWindow extends JFrame
     setVisible (true);
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getFilterText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder filterText = new StringBuilder ();
 
@@ -219,7 +235,9 @@ public class DisksWindow extends JFrame
     return filterText.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   class CheckBoxActionListener implements ActionListener
+  // ---------------------------------------------------------------------------------//
   {
     @Override
     public void actionPerformed (ActionEvent e)

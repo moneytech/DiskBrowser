@@ -1,72 +1,34 @@
 package com.bytezone.diskbrowser.applefile;
 
-import java.awt.AlphaComposite;
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
 import java.awt.image.DataBuffer;
-import java.util.ArrayList;
-import java.util.List;
 
-public class FontFile extends AbstractFile
+// -----------------------------------------------------------------------------------//
+public class FontFile extends CharacterList
+// -----------------------------------------------------------------------------------//
 {
-  List<Character> characters = new ArrayList<Character> ();
+  private static final int charsX = 16;
 
-  public FontFile (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  public FontFile (String name, byte[] buffer, int address)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
-    image = new BufferedImage (8 * (7 + 4), 12 * (8 + 4), BufferedImage.TYPE_BYTE_GRAY);
-    Graphics2D g2d = image.createGraphics ();
-    g2d.setComposite (AlphaComposite.getInstance (AlphaComposite.SRC_OVER, (float) 1.0));
-
+    loadAddress = address;
     int ptr = 0;
-    int x = 2;
-    int y = 2;
-    int count = 0;
 
     while (ptr < buffer.length)
     {
-      Character c = new Character (buffer, ptr);
-      ptr += 8;
-      characters.add (c);
-
-      g2d.drawImage (c.image, x, y, null);
-      x += 7 + 4;
-      if (++count % 8 == 0)
-      {
-        x = 2;
-        y += 8 + 4;
-      }
-    }
-    g2d.dispose ();
-  }
-
-  @Override
-  public String getText ()
-  {
-    StringBuilder text = new StringBuilder ("Name : " + name + "\n\n");
-
-    for (int i = 0; i < characters.size (); i += 8)
-    {
-      StringBuilder line = new StringBuilder ();
-      for (int j = 0; j < 8; j++)
-      {
-        for (int k = 0; k < 8; k++)
-        {
-          line.append (characters.get (i + k).lines[j]);
-          line.append ("    ");
-        }
-        line.append ("\n");
-      }
-
-      text.append (line.toString ());
-      text.append ("\n");
+      characters.add (new FontFileCharacter (buffer, ptr));
+      ptr += sizeY;
     }
 
-    return text.toString ();
+    buildImage (borderX, borderY, gapX, gapY, sizeX, sizeY, charsX);
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean isFont (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer.length % 8 != 0)
       return false;
@@ -76,42 +38,28 @@ public class FontFile extends AbstractFile
     return true;
   }
 
-  class Character
+  // ---------------------------------------------------------------------------------//
+  class FontFileCharacter extends Character
+  // ---------------------------------------------------------------------------------//
   {
-    String[] lines = new String[8];
-    private final BufferedImage image;
-
-    public Character (byte[] buffer, int ptr)
+    // -------------------------------------------------------------------------------//
+    public FontFileCharacter (byte[] buffer, int ptr)
+    // -------------------------------------------------------------------------------//
     {
-      // draw the image
-      image = new BufferedImage (7, 8, BufferedImage.TYPE_BYTE_GRAY);
+      super (sizeX, sizeY);
+
       DataBuffer dataBuffer = image.getRaster ().getDataBuffer ();
       int element = 0;
 
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < sizeY; i++)
       {
-        int b = buffer[ptr + i] & 0xFF;
-        String s = "0000000" + Integer.toString (b, 2);
-        s = s.substring (s.length () - 7);
-        s = s.replace ('0', ' ');
-        s = s.replace ('1', 'O');
-        s = new StringBuilder (s).reverse ().toString ();
-        for (byte ch : s.getBytes ())
-          dataBuffer.setElem (element++, ch == ' ' ? 0 : 255);
-        lines[i] = s;
+        int value = buffer[ptr++] & 0xFF;
+        for (int j = 0; j < sizeX; j++)
+        {
+          dataBuffer.setElem (element++, (value & 0x01) == 0 ? 0 : 0xFF);
+          value >>>= 1;
+        }
       }
-    }
-
-    @Override
-    public String toString ()
-    {
-      StringBuilder text = new StringBuilder ();
-
-      for (String s : lines)
-        text.append (s + "\n");
-      text.deleteCharAt (text.length () - 1);
-
-      return text.toString ();
     }
   }
 }

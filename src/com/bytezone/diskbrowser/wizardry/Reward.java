@@ -5,7 +5,9 @@ import java.util.List;
 
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 
+// -----------------------------------------------------------------------------------//
 class Reward extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
   static String[] types = { "gold", "item" };
   static final int SEGMENT_LENGTH = 18;
@@ -13,16 +15,18 @@ class Reward extends AbstractFile
   int totalElements;
   List<RewardElement> elements;
   List<Item> items;
-  List<Monster> goldMonsters = new ArrayList<Monster> ();
-  List<Monster> chestMonsters = new ArrayList<Monster> ();
+  List<Monster> goldMonsters = new ArrayList<> ();
+  List<Monster> chestMonsters = new ArrayList<> ();
 
-  public Reward (String name, byte[] buffer, int id, List<Item> items)
+  // ---------------------------------------------------------------------------------//
+  Reward (String name, byte[] buffer, int id, List<Item> items)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
     this.id = id;
     this.items = items;
     totalElements = buffer[4];
-    elements = new ArrayList<RewardElement> (totalElements);
+    elements = new ArrayList<> (totalElements);
 
     for (int i = 0; i < totalElements; i++)
     {
@@ -32,7 +36,9 @@ class Reward extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   public void addMonster (Monster monster, int location)
+  // ---------------------------------------------------------------------------------//
   {
     if (location == 0)
       goldMonsters.add (monster);
@@ -40,13 +46,17 @@ class Reward extends AbstractFile
       chestMonsters.add (monster);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     return getText (true);
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getText (boolean showLinks)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     for (RewardElement re : elements)
@@ -71,7 +81,9 @@ class Reward extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getDump ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     int seq = 0;
@@ -84,7 +96,9 @@ class Reward extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private class RewardElement
+  // ---------------------------------------------------------------------------------//
   {
     int type;
     int odds;
@@ -128,8 +142,7 @@ class Reward extends AbstractFile
             for (int j = 0; j < lineItem.length; j++)
               lineItem[j] = i + j <= max ? items.get (i + j).getName () : "";
             text.append (String.format ("%-17s %-16s %-16s %-16s %-16s%n", lineTitle,
-                                        lineItem[0], lineItem[1], lineItem[2],
-                                        lineItem[3]));
+                lineItem[0], lineItem[1], lineItem[2], lineItem[3]));
           }
           break;
         default:

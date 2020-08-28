@@ -6,10 +6,17 @@ import java.util.List;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 import com.bytezone.diskbrowser.applefile.AppleFileSource;
-import com.bytezone.diskbrowser.disk.*;
+import com.bytezone.diskbrowser.disk.AbstractFormattedDisk;
+import com.bytezone.diskbrowser.disk.AppleDisk;
+import com.bytezone.diskbrowser.disk.DefaultAppleFileSource;
+import com.bytezone.diskbrowser.disk.Disk;
+import com.bytezone.diskbrowser.disk.DiskAddress;
+import com.bytezone.diskbrowser.disk.SectorType;
 import com.bytezone.diskbrowser.gui.DataSource;
 
+// -----------------------------------------------------------------------------------//
 public class CPMDisk extends AbstractFormattedDisk
+// -----------------------------------------------------------------------------------//
 {
   private final Color green = new Color (0, 200, 0);
 
@@ -27,7 +34,9 @@ public class CPMDisk extends AbstractFormattedDisk
   //                        // http://www.seasip.info/Cpm/format31.html
   private final DefaultMutableTreeNode volumeNode;
 
+  // ---------------------------------------------------------------------------------//
   public CPMDisk (Disk disk)
+  // ---------------------------------------------------------------------------------//
   {
     super (disk);
 
@@ -46,7 +55,7 @@ public class CPMDisk extends AbstractFormattedDisk
     // search for the version string
     for (int i = 8; i >= 4; i -= 2)
     {
-      byte[] buffer = disk.readSector (0, i);
+      byte[] buffer = disk.readBlock (0, i);
       String text = new String (buffer, 16, 24);
       if ("DIR ERA TYPESAVEREN USER".equals (text))
       {
@@ -63,8 +72,8 @@ public class CPMDisk extends AbstractFormattedDisk
     {
       DiskAddress da = disk.getDiskAddress (3, sector);
 
-      sectorTypes[da.getBlock ()] = catalogSector;
-      byte[] buffer = disk.readSector (da);
+      sectorTypes[da.getBlockNo ()] = catalogSector;
+      byte[] buffer = disk.readBlock (da);
       int b1 = buffer[0] & 0xFF;
       int b2 = buffer[1] & 0xFF;
       if (b1 == 0xE5)
@@ -86,8 +95,8 @@ public class CPMDisk extends AbstractFormattedDisk
         DirectoryEntry entry = new DirectoryEntry (this, buffer, i);
         SectorType sectorType = getSectorType (entry.getType ());
         for (DiskAddress block : entry.getSectors ())
-          if (!disk.isSectorEmpty (block))
-            sectorTypes[block.getBlock ()] = sectorType;
+          if (!disk.isBlockEmpty (block))
+            sectorTypes[block.getBlockNo ()] = sectorType;
 
         DirectoryEntry parent = findParent (entry);
         if (parent == null)
@@ -109,7 +118,9 @@ public class CPMDisk extends AbstractFormattedDisk
     makeNodeVisible (volumeNode.getFirstLeaf ());
   }
 
+  // ---------------------------------------------------------------------------------//
   private SectorType getSectorType (String type)
+  // ---------------------------------------------------------------------------------//
   {
     if ("COM".equals (type))
       return comSector;
@@ -129,15 +140,19 @@ public class CPMDisk extends AbstractFormattedDisk
     return otherSector;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getFileSectors (int fileNo)
+  // ---------------------------------------------------------------------------------//
   {
     if (fileEntries.size () > 0 && fileEntries.size () > fileNo)
       return fileEntries.get (fileNo).getSectors ();
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   private DirectoryEntry findParent (DirectoryEntry child)
+  // ---------------------------------------------------------------------------------//
   {
     for (AppleFileSource entry : fileEntries)
       if (((DirectoryEntry) entry).matches (child))
@@ -146,11 +161,13 @@ public class CPMDisk extends AbstractFormattedDisk
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DataSource getFormattedSector (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
-    SectorType type = sectorTypes[da.getBlock ()];
-    byte[] buffer = disk.readSector (da);
+    SectorType type = sectorTypes[da.getBlockNo ()];
+    byte[] buffer = disk.readBlock (da);
 
     if (type == catalogSector)
       return new CPMCatalogSector (disk, buffer, da);
@@ -158,8 +175,10 @@ public class CPMDisk extends AbstractFormattedDisk
     return super.getFormattedSector (da);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public AppleFileSource getCatalog ()
+  // ---------------------------------------------------------------------------------//
   {
     String newLine = String.format ("%n");
     String line =
@@ -182,13 +201,15 @@ public class CPMDisk extends AbstractFormattedDisk
     return new DefaultAppleFileSource ("CPM Disk ", text.toString (), this);
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean isCorrectFormat (AppleDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     disk.setInterleave (3);
 
     for (int i = 8; i >= 4; i -= 2)
     {
-      byte[] buffer = disk.readSector (0, i);
+      byte[] buffer = disk.readBlock (0, i);
       String text = new String (buffer, 16, 24);
       if ("DIR ERA TYPESAVEREN USER".equals (text))
       {
@@ -200,7 +221,7 @@ public class CPMDisk extends AbstractFormattedDisk
 
     for (int sector = 0; sector < 8; sector++)
     {
-      byte[] buffer = disk.readSector (3, sector);
+      byte[] buffer = disk.readBlock (3, sector);
 
       // check if entire sector is empty (everything == 0xE5)
       if (bufferContainsAll (buffer, (byte) 0xE5))
@@ -212,7 +233,7 @@ public class CPMDisk extends AbstractFormattedDisk
         if (val == 0xE5)
           break;
 
-        if (val > 31)   // && val != 0xE5)
+        if (val > 31)
           return false;
 
         for (int j = 1; j <= 8; j++)
@@ -227,7 +248,9 @@ public class CPMDisk extends AbstractFormattedDisk
     return true;
   }
 
+  // ---------------------------------------------------------------------------------//
   private static boolean bufferContainsAll (byte[] buffer, byte value)
+  // ---------------------------------------------------------------------------------//
   {
     for (byte b : buffer)
       if (b != value)
@@ -235,10 +258,12 @@ public class CPMDisk extends AbstractFormattedDisk
     return true;
   }
 
-  @Override
-  public String toString ()
-  {
-    StringBuffer text = new StringBuffer ("CPM disk");
-    return text.toString ();
-  }
+  // ---------------------------------------------------------------------------------//
+  //  @Override
+  //  public String toString ()
+  //  // ---------------------------------------------------------------------------------//
+  //  {
+  //    StringBuffer text = new StringBuffer ("CPM disk");
+  //    return text.toString ();
+  //  }
 }

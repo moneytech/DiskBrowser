@@ -2,8 +2,11 @@ package com.bytezone.diskbrowser.wizardry;
 
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 class Item extends AbstractFile implements Comparable<Item>
+// -----------------------------------------------------------------------------------//
 {
   public final int itemID;
   private final int type;
@@ -15,22 +18,26 @@ class Item extends AbstractFile implements Comparable<Item>
   public final int armourClass;
   public final int speed;
 
-  public Item (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  Item (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
     itemID = counter++;
     type = buffer[32];
-    cost = HexFormatter.intValue (buffer[44], buffer[45])
-        + HexFormatter.intValue (buffer[46], buffer[47]) * 10000
-        + HexFormatter.intValue (buffer[48], buffer[49]) * 100000000L;
+    cost = Utility.intValue (buffer[44], buffer[45])
+        + Utility.intValue (buffer[46], buffer[47]) * 10000
+        + Utility.intValue (buffer[48], buffer[49]) * 100000000L;
     genericName = HexFormatter.getPascalString (buffer, 16);
     damage = new Dice (buffer, 66);
     armourClass = buffer[62];
     speed = buffer[72];
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -51,7 +58,9 @@ class Item extends AbstractFile implements Comparable<Item>
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public int getType ()
+  // ---------------------------------------------------------------------------------//
   {
     return type;
   }
@@ -66,32 +75,42 @@ class Item extends AbstractFile implements Comparable<Item>
   //		return HexFormatter.intValue (buffer[72]);
   //	}
 
+  // ---------------------------------------------------------------------------------//
   public long getCost ()
+  // ---------------------------------------------------------------------------------//
   {
     return cost;
   }
 
+  // ---------------------------------------------------------------------------------//
   public boolean isCursed ()
+  // ---------------------------------------------------------------------------------//
   {
     return buffer[36] != 0;
   }
 
+  // ---------------------------------------------------------------------------------//
   public int getStockOnHand ()
+  // ---------------------------------------------------------------------------------//
   {
     if (buffer[50] == -1 && buffer[51] == -1)
       return -1;
 
-    return HexFormatter.intValue (buffer[50], buffer[51]);
+    return Utility.intValue (buffer[50], buffer[51]);
   }
 
+  // ---------------------------------------------------------------------------------//
   public boolean canUse (int type2)
+  // ---------------------------------------------------------------------------------//
   {
     int users = buffer[54] & 0xFF;
     return ((users >>> type2) & 1) == 1;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder line = new StringBuilder ();
     line.append (String.format ("%-16s", name));
@@ -120,7 +139,9 @@ class Item extends AbstractFile implements Comparable<Item>
     return line.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getDump (int block)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder line = new StringBuilder (String.format ("%3d %-16s", itemID, name));
     int lo = block == 0 ? 32 : block == 1 ? 46 : 70;
@@ -132,8 +153,10 @@ class Item extends AbstractFile implements Comparable<Item>
     return line.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public int compareTo (Item otherItem)
+  // ---------------------------------------------------------------------------------//
   {
     Item item = otherItem;
     return this.type - item.type;

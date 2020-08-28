@@ -9,22 +9,31 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.swing.*;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.ScrollPaneConstants;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableColumnModel;
 
 import com.bytezone.diskbrowser.gui.DuplicateAction.DiskTableSelectionListener;
 
+// -----------------------------------------------------------------------------------//
 public class DeleteWindow extends JFrame implements DiskTableSelectionListener
+// -----------------------------------------------------------------------------------//
 {
-  private List<DiskDetails> lines = new ArrayList<DiskDetails> ();
+  private List<DiskDetails> lines = new ArrayList<> ();
   private final JButton btnHide = new JButton ("Close");
   private final RootFolderData rootFolderData;
 
   private final DeleteTableModel deleteTableModel = new DeleteTableModel ();
   private final JTable table = new JTable (deleteTableModel);
 
+  // ---------------------------------------------------------------------------------//
   public DeleteWindow (RootFolderData rootFolderData)
+  // ---------------------------------------------------------------------------------//
   {
     super ("Duplicate Disks");
 
@@ -67,14 +76,18 @@ public class DeleteWindow extends JFrame implements DiskTableSelectionListener
     setLocationRelativeTo (null);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void diskSelected (DiskDetails diskDetails)
+  // ---------------------------------------------------------------------------------//
   {
     lines = rootFolderData.listDuplicates (diskDetails.getChecksum ());
     deleteTableModel.fireTableDataChanged ();
   }
 
+  // ---------------------------------------------------------------------------------//
   class DeleteTableModel extends AbstractTableModel
+  // ---------------------------------------------------------------------------------//
   {
     final String[] headers = { "Name", "Type", "Size", "Checksum", };
 

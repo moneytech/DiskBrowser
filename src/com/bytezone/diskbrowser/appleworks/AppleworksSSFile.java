@@ -5,13 +5,18 @@ import java.util.List;
 
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class AppleworksSSFile extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
   Header header;
-  List<Row> rows = new ArrayList<Row> ();
+  List<Row> rows = new ArrayList<> ();
 
+  // ---------------------------------------------------------------------------------//
   public AppleworksSSFile (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -20,7 +25,7 @@ public class AppleworksSSFile extends AbstractFile
     int ptr = header.ssMinVers == 0 ? 300 : 302;
     while (ptr < buffer.length)
     {
-      int length = HexFormatter.unsignedShort (buffer, ptr);
+      int length = Utility.unsignedShort (buffer, ptr);
 
       if (length == 0xFFFF)
         break;
@@ -32,8 +37,10 @@ public class AppleworksSSFile extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder (header.toString ());
 
@@ -47,14 +54,18 @@ public class AppleworksSSFile extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   static String getCellName (int row, int column)
+  // ---------------------------------------------------------------------------------//
   {
     char c1 = (char) ('A' + column / 26 - 1);
     char c2 = (char) ('A' + column % 26);
     return "" + (c1 == '@' ? "" : c1) + c2 + row;
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Header
+  // ---------------------------------------------------------------------------------//
   {
     private final int[] columnWidths = new int[127];
     private final char calcOrder;
@@ -92,7 +103,7 @@ public class AppleworksSSFile extends AbstractFile
 
       calcOrder = (char) buffer[131];
       calcFrequency = (char) buffer[132];
-      lastRow = HexFormatter.unsignedShort (buffer, 133);
+      lastRow = Utility.unsignedShort (buffer, 133);
       lastColumn = buffer[135] & 0xFF;
       windowLayout = (char) buffer[136];
       windowSynch = buffer[137] != 0;
@@ -193,15 +204,15 @@ public class AppleworksSSFile extends AbstractFile
 
       r1 = buffer[offset + 3] & 0xFF;
       c1 = buffer[offset + 4] & 0xFF;
-      r2 = HexFormatter.unsignedShort (buffer, offset + 5);
+      r2 = Utility.unsignedShort (buffer, offset + 5);
       c2 = buffer[offset + 7] & 0xFF;
-      r3 = HexFormatter.unsignedShort (buffer, offset + 8);
+      r3 = Utility.unsignedShort (buffer, offset + 8);
       c3 = buffer[offset + 10] & 0xFF;
-      r4 = HexFormatter.unsignedShort (buffer, offset + 11);
+      r4 = Utility.unsignedShort (buffer, offset + 11);
       c4 = buffer[offset + 13] & 0xFF;
       r5 = buffer[offset + 14] & 0xFF;
       c5 = buffer[offset + 15] & 0xFF;
-      r6 = HexFormatter.unsignedShort (buffer, offset + 16);
+      r6 = Utility.unsignedShort (buffer, offset + 16);
       c6 = buffer[offset + 18] & 0xFF;
       r7 = buffer[offset + 19] & 0xFF;
       c7 = buffer[offset + 20] & 0xFF;
@@ -245,14 +256,16 @@ public class AppleworksSSFile extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Row
+  // ---------------------------------------------------------------------------------//
   {
     private final int rowNumber;
-    private final List<Cell> cells = new ArrayList<Cell> ();
+    private final List<Cell> cells = new ArrayList<> ();
 
     public Row (int ptr)
     {
-      rowNumber = HexFormatter.unsignedShort (buffer, ptr);
+      rowNumber = Utility.unsignedShort (buffer, ptr);
       ptr += 2;                                   // first control byte
 
       int column = 0;

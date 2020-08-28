@@ -2,65 +2,196 @@ package com.bytezone.diskbrowser.utilities;
 
 import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
+// -----------------------------------------------------------------------------------//
 public class Utility
+// -----------------------------------------------------------------------------------//
 {
-  public static final List<String> suffixes =
-      Arrays.asList ("po", "dsk", "do", "hdv", "2mg", "v2d", "d13", "sdk", "woz");
+  public static final List<String> suffixes = Arrays.asList ("po", "dsk", "do", "hdv",
+      "2mg", "v2d", "d13", "sdk", "woz", "img", "dimg");
 
-  // not used - it doesn't work with Oracle's JDK
-  //  private static boolean hasRetinaDisplay ()
-  //  {
-  //    Object obj =
-  //        Toolkit.getDefaultToolkit ().getDesktopProperty ("apple.awt.contentScaleFactor");
-  //    if (obj instanceof Float)
-  //    {
-  //      Float f = (Float) obj;
-  //      int scale = f.intValue ();
-  //      return (scale == 2);            // 1 indicates a regular mac display.
-  //    }
-  //    return false;
-  //  }
-
+  // ---------------------------------------------------------------------------------//
   public static boolean test (Graphics2D g)
+  // ---------------------------------------------------------------------------------//
   {
     return g.getFontRenderContext ().getTransform ()
         .equals (AffineTransform.getScaleInstance (2.0, 2.0));
   }
 
-  static int getLong (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  public static void printStackTrace ()
+  // ---------------------------------------------------------------------------------//
+  {
+    for (StackTraceElement ste : java.lang.Thread.currentThread ().getStackTrace ())
+      System.out.println (ste);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int getLong (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     return getWord (buffer, ptr) + getWord (buffer, ptr + 2) * 0x10000;
   }
 
-  static int getWord (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  public static int getWord (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     int a = (buffer[ptr + 1] & 0xFF) << 8;
     int b = buffer[ptr] & 0xFF;
     return a + b;
   }
 
+  // ---------------------------------------------------------------------------------//
+  public static int intValue (byte b1, byte b2)
+  // ---------------------------------------------------------------------------------//
+  {
+    return (b1 & 0xFF) | ((b2 & 0xFF) << 8);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int intValue (byte b1, byte b2, byte b3)
+  // ---------------------------------------------------------------------------------//
+  {
+    return (b1 & 0xFF) | ((b2 & 0xFF) << 8) | ((b3 & 0xFF) << 16);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int unsignedLong (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    int val = 0;
+    for (int i = 3; i >= 0; i--)
+    {
+      val <<= 8;
+      val += buffer[ptr + i] & 0xFF;
+    }
+    return val;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int getLongBigEndian (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    int val = 0;
+    for (int i = 0; i < 4; i++)
+    {
+      val <<= 8;
+      val += buffer[ptr + i] & 0xFF;
+    }
+    return val;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int getWordBigEndian (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    int val = 0;
+    for (int i = 0; i < 2; i++)
+    {
+      val <<= 8;
+      val += buffer[ptr + i] & 0xFF;
+    }
+    return val;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int unsignedShort (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    if (ptr >= buffer.length)
+    {
+      System.out.println ("Index out of range (unsigned short): " + ptr);
+      return 0;
+    }
+    return (buffer[ptr] & 0xFF) | ((buffer[ptr + 1] & 0xFF) << 8);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int signedShort (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    if (ptr >= buffer.length)
+    {
+      System.out.println ("Index out of range (signed short): " + ptr);
+      return 0;
+    }
+    return (short) ((buffer[ptr] & 0xFF) | ((buffer[ptr + 1] & 0xFF) << 8));
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int getShortBigEndian (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
+  {
+    int val = 0;
+    for (int i = 0; i < 2; i++)
+    {
+      val <<= 8;
+      val |= buffer[ptr + i] & 0xFF;
+    }
+    return val;
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static double getSANEDouble (byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
+  {
+    long bits = 0;
+    for (int i = 7; i >= 0; i--)
+    {
+      bits <<= 8;
+      bits |= buffer[offset + i] & 0xFF;
+    }
+
+    return Double.longBitsToDouble (bits);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static int dimension (int chars, int border, int size, int gap)
+  // ---------------------------------------------------------------------------------//
+  {
+    return border * 2 + chars * (size + gap) - gap;
+  }
+
+  // ---------------------------------------------------------------------------------//
   public static boolean find (byte[] buffer, byte[] key)
+  // ---------------------------------------------------------------------------------//
   {
     for (int i = 0; i < buffer.length; i++)
-    {
-      if (buffer[i] == key[0])
+      if (matches (buffer, i, key))
       {
-        if (matches (buffer, i, key))
-        {
-          System.out.printf ("Matches at %04X%n", i);
-          return true;
-        }
+        System.out.printf ("Matches at %04X%n", i);
+        return true;
       }
-    }
+
     return false;
   }
 
+  // ---------------------------------------------------------------------------------//
+  public static boolean matches (byte[] buffer, int offset, byte[] key)
+  // ---------------------------------------------------------------------------------//
+  {
+    int ptr = 0;
+    while (offset < buffer.length && ptr < key.length)
+      if (buffer[offset++] != key[ptr++])
+        return false;
+
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------------//
   public static LocalDateTime getDateTime (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     try
     {
@@ -78,22 +209,16 @@ public class Utility
     }
   }
 
-  public static boolean matches (byte[] buffer, int offset, byte[] key)
-  {
-    int ptr = 0;
-    while (offset < buffer.length && ptr < key.length)
-      if (buffer[offset++] != key[ptr++])
-        return false;
-
-    return true;
-  }
-
+  // ---------------------------------------------------------------------------------//
   public static int getSuffixNo (String filename)
+  // ---------------------------------------------------------------------------------//
   {
     return suffixes.indexOf (getSuffix (filename));
   }
 
+  // ---------------------------------------------------------------------------------//
   public static String getSuffix (String filename)
+  // ---------------------------------------------------------------------------------//
   {
     String lcFilename = filename.toLowerCase ();
 
@@ -109,14 +234,57 @@ public class Utility
     return lcFilename.substring (dotPos + 1);
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean validFileType (String filename)
+  // ---------------------------------------------------------------------------------//
   {
     if (filename.startsWith ("."))          // ignore invisible files
       return false;
     return suffixes.contains (getSuffix (filename));
   }
 
+  // ---------------------------------------------------------------------------------//
+  public static void reverse (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  {
+    int lo = 0;
+    int hi = buffer.length - 1;
+
+    while (lo < hi)
+    {
+      byte temp = buffer[lo];
+      buffer[lo++] = buffer[hi];
+      buffer[hi--] = temp;
+    }
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public static long getChecksumValue (File file)
+  // ---------------------------------------------------------------------------------//
+  {
+    Checksum checksum = new CRC32 ();
+    try
+    {
+      BufferedInputStream is =
+          new BufferedInputStream (new FileInputStream (file.getAbsolutePath ()));
+      byte[] bytes = new byte[1024];
+      int len = 0;
+
+      while ((len = is.read (bytes)) >= 0)
+        checksum.update (bytes, 0, len);
+
+      is.close ();
+    }
+    catch (IOException e)
+    {
+      e.printStackTrace ();
+    }
+    return checksum.getValue ();
+  }
+
+  // ---------------------------------------------------------------------------------//
   public static int crc32 (byte[] buffer, int offset, int length)
+  // ---------------------------------------------------------------------------------//
   {
     int crc = 0xFFFFFFFF;        // one's complement of zero
     int eof = offset + length;

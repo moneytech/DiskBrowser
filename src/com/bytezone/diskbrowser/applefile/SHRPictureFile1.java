@@ -6,25 +6,33 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class SHRPictureFile1 extends HiResImage
+// -----------------------------------------------------------------------------------//
 {
-  private final List<Block> blocks = new ArrayList<Block> ();
+  private final List<Block> blocks = new ArrayList<> ();
   private Main mainBlock;
   private Multipal multipalBlock;
   private final boolean debug = false;
 
-  // 0xC0/02 - Apple IIGS Super Hi-Res Picture File (APF)
+  // PNT - 0xC0/02 - Apple IIGS Super Hi-Res Picture File (APF)
+  // ---------------------------------------------------------------------------------//
   public SHRPictureFile1 (String name, byte[] buffer, int fileType, int auxType, int eof)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer, fileType, auxType, eof);
 
     int ptr = 0;
     while (ptr < buffer.length)
     {
-      int len = HexFormatter.unsignedLong (buffer, ptr);
-      if (len == 0)
+      int len = Utility.unsignedLong (buffer, ptr);
+      if (len == 0 || len > buffer.length)
+      {
+        System.out.printf ("Block length: %d%n", len);
         break;
+      }
 
       String kind = HexFormatter.getPascalString (buffer, ptr + 4);
       byte[] data = new byte[Math.min (len, buffer.length - ptr)];
@@ -57,7 +65,13 @@ public class SHRPictureFile1 extends HiResImage
         case "Platinum Paint":
         case "VSDV":
         case "VSMK":
+        case "816/Paint":
+        case "SHRConvert":
           blocks.add (new Block (kind, data));
+          break;
+
+        case "Nseq":
+          blocks.add (new Nseq (kind, data));
           break;
 
         default:
@@ -68,11 +82,14 @@ public class SHRPictureFile1 extends HiResImage
 
       ptr += len;
     }
+
     createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   void createMonochromeImage ()
+  // ---------------------------------------------------------------------------------//
   {
     image = new BufferedImage (320, 200, BufferedImage.TYPE_BYTE_GRAY);
     DataBuffer db = image.getRaster ().getDataBuffer ();
@@ -93,17 +110,29 @@ public class SHRPictureFile1 extends HiResImage
       }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   void createColourImage ()
+  // ---------------------------------------------------------------------------------//
   {
-    int width = mainBlock.pixelsPerScanLine == 320 ? 640 : mainBlock.pixelsPerScanLine;
-    image =
-        new BufferedImage (width, mainBlock.numScanLines * 2, BufferedImage.TYPE_INT_RGB);
+    if (mainBlock == null)
+    {
+      System.out.println ("No MAIN block in image file");
+      return;
+    }
+
+    boolean mode320 = (mainBlock.masterMode & 0x80) == 0;
+
+    int imageWidth = mainBlock.pixelsPerScanLine;
+    if (mode320)
+      imageWidth *= 2;        // every horizontal pixel is drawn twice
+
+    image = new BufferedImage (imageWidth, mainBlock.numScanLines * 2,
+        BufferedImage.TYPE_INT_RGB);
     DataBuffer dataBuffer = image.getRaster ().getDataBuffer ();
 
-    int element1 = 0;         // first line
-    int element2 = width;     // second line
-    int ptr = 0;              // index into buffer
+    int element = 0;
+    int ptr = 0;
 
     for (int line = 0; line < mainBlock.numScanLines; line++)
     {
@@ -111,81 +140,36 @@ public class SHRPictureFile1 extends HiResImage
       int hi = dirEntry.mode & 0xFF00;      // always 0
       int lo = dirEntry.mode & 0x00FF;      // mode bit if hi == 0
 
+      boolean fillMode = (dirEntry.mode & 0x20) != 0;
+      //      assert fillMode == false;
+
       if (hi != 0)
         System.out.println ("hi not zero");
 
-      ColorTable colorTable = multipalBlock != null ? multipalBlock.colorTables[line]
-          : mainBlock.colorTables[lo & 0x0F];
+      ColorTable colorTable = //
+          multipalBlock != null ? multipalBlock.colorTables[line]
+              : mainBlock.colorTables[lo & 0x0F];
 
-      //      boolean fillMode = (lo & 0x20) != 0;
-      //      if (fillMode)
-      //        System.out.println ("fillmode " + fillMode);
+      int dataWidth = mainBlock.pixelsPerScanLine / (mode320 ? 2 : 4);
 
-      // 320 mode
-      if (mainBlock.pixelsPerScanLine == 320)
-      {
-        for (int i = 0; i < 160; i++)       // two pixels per col
-        {
-          int left = (buffer[ptr] & 0xF0) >> 4;
-          int right = buffer[ptr++] & 0x0F;
+      if (mode320)       // two pixels per byte, each shown twice
+        ptr = mode320Line (ptr, element, dataWidth, colorTable, dataBuffer, imageWidth);
+      else              // four pixels per byte
+        ptr = mode640Line (ptr, element, dataWidth, colorTable, dataBuffer, imageWidth);
 
-          // get left/right colors
-          int rgbLeft = colorTable.entries[left].color.getRGB ();
-          int rgbRight = colorTable.entries[right].color.getRGB ();
-
-          // draw left/right pixels on current line
-          dataBuffer.setElem (element1++, rgbLeft);
-          dataBuffer.setElem (element1++, rgbLeft);
-          dataBuffer.setElem (element1++, rgbRight);
-          dataBuffer.setElem (element1++, rgbRight);
-
-          // draw same left/right pixels on next line
-          dataBuffer.setElem (element2++, rgbLeft);
-          dataBuffer.setElem (element2++, rgbLeft);
-          dataBuffer.setElem (element2++, rgbRight);
-          dataBuffer.setElem (element2++, rgbRight);
-        }
-        element1 += width;        // skip line already drawn
-        element2 += width;        // one line ahead
-      }
-      else
-      {
-        int max = mainBlock.pixelsPerScanLine / 4;
-        for (int col = 0; col < max; col++)       // four pixels per col
-        {
-          int p1 = (buffer[ptr] & 0xC0) >> 6;
-          int p2 = (buffer[ptr] & 0x30) >> 4;
-          int p3 = (buffer[ptr] & 0x0C) >> 2;
-          int p4 = (buffer[ptr++] & 0x03);
-
-          // get pixel colors
-          int rgb1 = colorTable.entries[p1 + 8].color.getRGB ();
-          int rgb2 = colorTable.entries[p2 + 12].color.getRGB ();
-          int rgb3 = colorTable.entries[p3].color.getRGB ();
-          int rgb4 = colorTable.entries[p4 + 4].color.getRGB ();
-
-          // draw pixels on current line
-          dataBuffer.setElem (element1++, rgb1);
-          dataBuffer.setElem (element1++, rgb2);
-          dataBuffer.setElem (element1++, rgb3);
-          dataBuffer.setElem (element1++, rgb4);
-
-          // draw same pixels on next line
-          dataBuffer.setElem (element2++, rgb1);
-          dataBuffer.setElem (element2++, rgb2);
-          dataBuffer.setElem (element2++, rgb3);
-          dataBuffer.setElem (element2++, rgb4);
-        }
-        element1 += width;        // skip line already drawn
-        element2 += width;        // one line ahead
-      }
+      element += imageWidth * 2;        // drawing two lines at a time
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder (super.getText ());
+
+    if (mainBlock == null)
+      text.append ("\nFailure    : No MAIN block\n");
     text.append ("\n\n");
 
     for (Block block : blocks)
@@ -194,84 +178,118 @@ public class SHRPictureFile1 extends HiResImage
       text.append ("\n\n");
     }
 
-    if (blocks.size () > 0)
-    {
-      text.deleteCharAt (text.length () - 1);
-      text.deleteCharAt (text.length () - 1);
-    }
+    text.deleteCharAt (text.length () - 1);
+    text.deleteCharAt (text.length () - 1);
 
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Block
+  // ---------------------------------------------------------------------------------//
   {
     String kind;
     byte[] data;
+    int size;
 
+    // -------------------------------------------------------------------------------//
     public Block (String kind, byte[] data)
+    // -------------------------------------------------------------------------------//
     {
       this.kind = kind;
       this.data = data;
+      size = Utility.getLong (data, 0);
     }
 
+    // -------------------------------------------------------------------------------//
     @Override
     public String toString ()
+    // -------------------------------------------------------------------------------//
     {
       StringBuilder text = new StringBuilder ();
 
-      text.append (String.format ("Kind ...... %s%n%n", kind));
-      text.append (HexFormatter.format (data));
+      text.append (String.format ("Block ..... %s%n", kind));
+      text.append (String.format ("Size ...... %04X  %<d%n%n", size));
+
+      int headerSize = 5 + kind.length ();
+      text.append (HexFormatter.format (data, headerSize, data.length - headerSize));
 
       return text.toString ();
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Multipal extends Block
+  // ---------------------------------------------------------------------------------//
   {
-    int numPalettes;
+    int numColorTables;
     ColorTable[] colorTables;
 
+    // -------------------------------------------------------------------------------//
     public Multipal (String kind, byte[] data)
+    // -------------------------------------------------------------------------------//
     {
       super (kind, data);
 
       int ptr = 5 + kind.length ();
-      numPalettes = HexFormatter.unsignedShort (data, ptr);
+      numColorTables = Utility.unsignedShort (data, ptr);
 
       ptr += 2;
-      colorTables = new ColorTable[numPalettes];
-      for (int i = 0; i < numPalettes; i++)
+      colorTables = new ColorTable[numColorTables];
+
+      for (int i = 0; i < numColorTables; i++)
       {
         if (ptr < data.length - 32)
           colorTables[i] = new ColorTable (i, data, ptr);
         else
-          colorTables[i] = new ColorTable ();      // default empty table
+          colorTables[i] = new ColorTable (i, 0x00);      // default empty table !! not finished
         ptr += 32;
       }
     }
+
+    // ---------------------------------------------------------------------------------//
+    @Override
+    public String toString ()
+    // ---------------------------------------------------------------------------------//
+    {
+      StringBuilder text = new StringBuilder ();
+
+      text.append (String.format ("Kind ................. %s%n", kind));
+      text.append (String.format ("NumColorTables ....... %d%n%n", numColorTables));
+
+      for (int line = 0; line < numColorTables; line++)
+      {
+        text.append (colorTables[line]);
+        text.append ("\n\n");
+      }
+
+      return text.toString ();
+    }
   }
 
+  // ---------------------------------------------------------------------------------//
   private class Main extends Block
+  // ---------------------------------------------------------------------------------//
   {
     int masterMode;                     // 0 = Brooks, 0 = PNT 320 80 = PNT 640
-    int pixelsPerScanLine;              // 320 or 640
+    int pixelsPerScanLine;              // image width in pixels
     int numColorTables;                 // 1 = Brooks, 16 = Other (may be zero)
     ColorTable[] colorTables;           // [numColorTables]
-    int numScanLines;                   // >0
+    int numScanLines;                   // image height in pixels
     DirEntry[] scanLineDirectory;       // [numScanLines]
     byte[][] packedScanLines;
+    boolean mode640;
+    int dataWidth;
 
     public Main (String kind, byte[] data)
     {
       super (kind, data);
 
       int ptr = 5 + kind.length ();
-      masterMode = HexFormatter.unsignedShort (data, ptr);
-      pixelsPerScanLine = HexFormatter.unsignedShort (data, ptr + 2);
-      numColorTables = HexFormatter.unsignedShort (data, ptr + 4);
-
-      //      System.out.printf ("mm %02X, pix %d%n", masterMode, pixelsPerScanLine);
-      //      System.out.printf ("color tables: %d%n", numColorTables);
+      masterMode = Utility.unsignedShort (data, ptr);
+      pixelsPerScanLine = Utility.unsignedShort (data, ptr + 2);
+      numColorTables = Utility.unsignedShort (data, ptr + 4);
+      mode640 = (masterMode & 0x80) != 0;
 
       ptr += 6;
       colorTables = new ColorTable[numColorTables];
@@ -281,71 +299,81 @@ public class SHRPictureFile1 extends HiResImage
         ptr += 32;
       }
 
-      numScanLines = HexFormatter.unsignedShort (data, ptr);
+      numScanLines = Utility.unsignedShort (data, ptr);
       ptr += 2;
 
       scanLineDirectory = new DirEntry[numScanLines];
       packedScanLines = new byte[numScanLines][];
 
-      for (int i = 0; i < numScanLines; i++)
+      for (int line = 0; line < numScanLines; line++)
       {
         DirEntry dirEntry = new DirEntry (data, ptr);
-        scanLineDirectory[i] = dirEntry;
-        packedScanLines[i] = new byte[dirEntry.numBytes];
+        scanLineDirectory[line] = dirEntry;
+        packedScanLines[line] = new byte[dirEntry.numBytes];
         ptr += 4;
       }
 
-      for (int i = 0; i < numScanLines; i++)
+      for (int line = 0; line < numScanLines; line++)
       {
-        int len = scanLineDirectory[i].numBytes;
-        if (ptr + len > data.length)
+        int numBytes = scanLineDirectory[line].numBytes;
+        if (ptr + numBytes > data.length)
+        {
+          System.out.println ("breaking early");
           break;
+        }
 
-        System.arraycopy (data, ptr, packedScanLines[i], 0, len);
-        ptr += len;
+        System.arraycopy (data, ptr, packedScanLines[line], 0, numBytes);
+        ptr += numBytes;
       }
 
-      int width = pixelsPerScanLine == 320 ? 160 : pixelsPerScanLine / 4;
-      byte[] unpackedBuffer = new byte[numScanLines * width];
+      dataWidth = pixelsPerScanLine / (mode640 ? 4 : 2);
+
+      byte[] unpackedBuffer = new byte[numScanLines * dataWidth];
       ptr = 0;
       for (int line = 0; line < numScanLines; line++)
       {
-        //        byte[] lineBuffer = packedScanLines[line];
-        if (isOddAndEmpty (packedScanLines[line]))
-        {
-          System.out.println ("Odd number of bytes in empty buffer in " + name);
-          break;
-        }
-        //        System.out.printf ("Line: %3d%n", line);
-        //        System.out.println (scanLineDirectory[line]);
-        ptr = unpackLine (packedScanLines[line], unpackedBuffer, ptr);
+        //        if (isOddAndEmpty (packedScanLines[line]))
+        //        {
+        //          System.out.println ("Odd number of bytes in empty buffer in " + name);
+        //          break;
+        //        }
 
-        // something strange happening here
-        if (line == 102 && name.equals ("DRAGON.SHR"))
-          ptr -= 132;
+        int bytesUnpacked = unpack (packedScanLines[line], 0,
+            packedScanLines[line].length, unpackedBuffer, ptr);
+
+        if (bytesUnpacked != dataWidth && false)
+          System.out.printf ("Unexpected line width %3d  %5d  %3d  %3d%n", line, ptr,
+              bytesUnpacked, dataWidth);
+
+        ptr += dataWidth;
       }
 
       SHRPictureFile1.this.buffer = unpackedBuffer;
     }
 
-    private boolean isOddAndEmpty (byte[] buffer)
-    {
-      if (buffer.length % 2 == 0)
-        return false;
-      for (byte b : buffer)
-        if (b != 0)
-          return false;
-      return true;
-    }
+    // -------------------------------------------------------------------------------//
+    //    private boolean isOddAndEmpty (byte[] buffer)
+    //    // -------------------------------------------------------------------------------//
+    //    {
+    //      if (buffer.length % 2 == 0)
+    //        return false;
+    //      for (byte b : buffer)
+    //        if (b != 0)
+    //          return false;
+    //      return true;
+    //    }
 
+    // -------------------------------------------------------------------------------//
     @Override
     public String toString ()
+    // -------------------------------------------------------------------------------//
     {
       StringBuilder text = new StringBuilder ();
 
       text.append (String.format ("Kind ................. %s%n", kind));
       text.append (String.format ("MasterMode ........... %04X%n", masterMode));
-      text.append (String.format ("PixelsPerScanLine .... %d%n", pixelsPerScanLine));
+      text.append (String.format ("PixelsPerScanLine .... %d / %d = %d bytes%n",
+          pixelsPerScanLine, (mode640 ? 4 : 2), dataWidth));
       text.append (String.format ("NumColorTables ....... %d%n", numColorTables));
       text.append (String.format ("NumScanLines ......... %d%n%n", numScanLines));
 
@@ -374,7 +402,7 @@ public class SHRPictureFile1 extends HiResImage
 
       text.append (" #   Mode  Len       Packed Data\n");
       text.append ("---  ----  ---   ---------------------------------------");
-      text.append ("------------------------------------------\n");
+      text.append ("--------------------------------\n");
 
       int lineSize = 24;
       for (int i = 0; i < scanLineDirectory.length; i++)
@@ -382,18 +410,66 @@ public class SHRPictureFile1 extends HiResImage
         DirEntry dirEntry = scanLineDirectory[i];
         byte[] packedScanLine = packedScanLines[i];
         text.append (
-            String.format ("%3d   %3d  %3d   ", i, dirEntry.mode, packedScanLine.length));
+            String.format ("%3d  %04X  %3d   ", i, dirEntry.mode, packedScanLine.length));
         int ptr = 0;
         while (true)
         {
-          text.append (HexFormatter.getHexString (packedScanLine, ptr, lineSize));
+          String hex = HexFormatter.getHexString (packedScanLine, ptr, lineSize);
+          text.append (hex);
+          if (ptr == 0)
+          {
+            if (hex.length () < 71)
+              text.append (("                                        "
+                  + "                               ").substring (hex.length ()));
+          }
           ptr += lineSize;
           if (ptr >= packedScanLine.length)
             break;
           text.append ("\n                 ");
         }
         text.append ("\n");
+
+        if (true)
+        {
+          text.append ("\n");
+          text.append (debug (packedScanLine, 0, packedScanLine.length));
+          text.append ("\n");
+        }
       }
+
+      return text.toString ();
+    }
+  }
+
+  // ---------------------------------------------------------------------------------//
+  private class Nseq extends Block
+  // ---------------------------------------------------------------------------------//
+  {
+    // -------------------------------------------------------------------------------//
+    public Nseq (String kind, byte[] data)
+    // -------------------------------------------------------------------------------//
+    {
+      super (kind, data);
+    }
+
+    // -------------------------------------------------------------------------------//
+    @Override
+    public String toString ()
+    // -------------------------------------------------------------------------------//
+    {
+      StringBuilder text = new StringBuilder ();
+
+      text.append (String.format ("Block ..... %s%n", kind));
+      text.append (String.format ("Size ...... %04X  %<d%n%n", size));
+
+      int ptr = 5 + kind.length ();
+      while (ptr < data.length)
+      {
+        text.append (HexFormatter.format (data, ptr, 4) + "\n");
+        ptr += 4;
+      }
+
+      text.deleteCharAt (text.length () - 1);
 
       return text.toString ();
     }

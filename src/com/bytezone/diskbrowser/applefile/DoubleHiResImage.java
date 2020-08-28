@@ -5,7 +5,9 @@ import java.awt.image.DataBuffer;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
 
+// -----------------------------------------------------------------------------------//
 public class DoubleHiResImage extends HiResImage
+// -----------------------------------------------------------------------------------//
 {
   private static int[] swap = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
@@ -13,7 +15,9 @@ public class DoubleHiResImage extends HiResImage
   private DoubleScrunch doubleScrunch;
   byte[] packedBuffer;
 
+  // ---------------------------------------------------------------------------------//
   public DoubleHiResImage (String name, byte[] buffer, byte[] auxBuffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -21,40 +25,40 @@ public class DoubleHiResImage extends HiResImage
     createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public DoubleHiResImage (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
-
-    //    assert name.endsWith (".PAC") || name.endsWith ("A2FC");
 
     if (name.endsWith (".PAC"))
     {
       packedBuffer = buffer;
-      doubleScrunch = new DoubleScrunch ();
-      doubleScrunch.unscrunch (buffer);
+      doubleScrunch = new DoubleScrunch (buffer);
       auxBuffer = doubleScrunch.memory[0];
       this.buffer = doubleScrunch.memory[1];
     }
-    else          //if (name.endsWith (".A2FC") || auxType == 0x2000)
+    else
     {
       auxBuffer = new byte[0x2000];
       this.buffer = new byte[0x2000];
       System.arraycopy (buffer, 0, auxBuffer, 0, 0x2000);
       System.arraycopy (buffer, 0x2000, this.buffer, 0, 0x2000);
     }
-    //    else
-    //    {
-    //      auxBuffer = null;
-    //    }
 
     createImage ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   protected void createMonochromeImage ()
+  // ---------------------------------------------------------------------------------//
   {
     // image will be doubled vertically
-    image = new BufferedImage (560, 192 * 2, BufferedImage.TYPE_BYTE_GRAY);
+    int WIDTH = 280 * 2;
+    int HEIGHT = 192 * 2;
+
+    image = new BufferedImage (WIDTH, HEIGHT, BufferedImage.TYPE_BYTE_GRAY);
     DataBuffer dataBuffer = image.getRaster ().getDataBuffer ();
     int ndx = 0;
 
@@ -73,16 +77,18 @@ public class DoubleHiResImage extends HiResImage
               int val = (value >> px) & 0x01;
               int pixel = val == 0 ? 0 : 255;
               dataBuffer.setElem (ndx, pixel);
-              dataBuffer.setElem (ndx + 560, pixel);  // repeat pixel one line on
+              dataBuffer.setElem (ndx + WIDTH, pixel);  // repeat pixel one line on
               ++ndx;
             }
           }
-          ndx += 560;                                 // skip past repeated line
+          ndx += WIDTH;                                 // skip past repeated line
         }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   protected void createColourImage ()
+  // ---------------------------------------------------------------------------------//
   {
     paletteIndex = paletteFactory.getCurrentPaletteIndex ();
     Palette palette = paletteFactory.getCurrentPalette ();
@@ -106,7 +112,7 @@ public class DoubleHiResImage extends HiResImage
                 | ((auxBuffer[ptr + 1] & 0x7F) << 14) | ((buffer[ptr + 1] & 0x7F) << 21);
             for (int px = 0; px < 28; px += 4)
             {
-              int val = (value >> px) & 0x0F;
+              int val = (value >>> px) & 0x0F;
               int val2 = swap[val];
               dataBuffer.setElem (ndx++, colours[val2]);
               dataBuffer.setElem (ndx++, colours[val2]);  // repeat pixel
@@ -115,8 +121,10 @@ public class DoubleHiResImage extends HiResImage
         }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getHexDump ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 

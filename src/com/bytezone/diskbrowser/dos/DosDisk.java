@@ -9,10 +9,18 @@ import javax.swing.tree.DefaultMutableTreeNode;
 
 import com.bytezone.diskbrowser.applefile.AppleFileSource;
 import com.bytezone.diskbrowser.applefile.BootSector;
-import com.bytezone.diskbrowser.disk.*;
+import com.bytezone.diskbrowser.disk.AbstractFormattedDisk;
+import com.bytezone.diskbrowser.disk.AppleDisk;
+import com.bytezone.diskbrowser.disk.DefaultAppleFileSource;
+import com.bytezone.diskbrowser.disk.DefaultSector;
+import com.bytezone.diskbrowser.disk.Disk;
+import com.bytezone.diskbrowser.disk.DiskAddress;
+import com.bytezone.diskbrowser.disk.SectorType;
 import com.bytezone.diskbrowser.gui.DataSource;
 
+// -----------------------------------------------------------------------------------//
 public class DosDisk extends AbstractFormattedDisk
+// -----------------------------------------------------------------------------------//
 {
   private static final int ENTRY_SIZE = 35;
   private static final int CATALOG_TRACK = 17;
@@ -24,6 +32,7 @@ public class DosDisk extends AbstractFormattedDisk
 
   private int freeSectors;
   private int usedSectors;
+  private final int volumeNo;             // for multi-volume disks
 
   public final SectorType vtocSector = new SectorType ("VTOC", Color.magenta);
   public final SectorType catalogSector = new SectorType ("Catalog", green);
@@ -31,16 +40,29 @@ public class DosDisk extends AbstractFormattedDisk
   public final SectorType dataSector = new SectorType ("Data", Color.red);
   public final SectorType dosSector = new SectorType ("DOS", Color.lightGray);
 
-  protected List<AppleFileSource> deletedFileEntries = new ArrayList<AppleFileSource> ();
+  protected List<AppleFileSource> deletedFileEntries = new ArrayList<> ();
+
+  private static boolean debug = false;
 
   enum FileType
   {
     Text, ApplesoftBasic, IntegerBasic, Binary, Relocatable, SS, AA, BB
   }
 
+  // ---------------------------------------------------------------------------------//
   public DosDisk (Disk disk)
+  // ---------------------------------------------------------------------------------//
+  {
+    this (disk, 0);
+  }
+
+  // ---------------------------------------------------------------------------------//
+  public DosDisk (Disk disk, int volumeNo)
+  // ---------------------------------------------------------------------------------//
   {
     super (disk);
+
+    this.volumeNo = volumeNo;
 
     sectorTypesList.add (dosSector);
     sectorTypesList.add (vtocSector);
@@ -49,20 +71,22 @@ public class DosDisk extends AbstractFormattedDisk
     sectorTypesList.add (dataSector);
 
     DiskAddress da = disk.getDiskAddress (0, 0);
-    byte[] sectorBuffer = disk.readSector (da);               // Boot sector
+    byte[] sectorBuffer = disk.readBlock (da);               // Boot sector
     bootSector = new BootSector (disk, sectorBuffer, "DOS", da);
 
     da = disk.getDiskAddress (CATALOG_TRACK, VTOC_SECTOR);
-    sectorBuffer = disk.readSector (da);          // VTOC
+    sectorBuffer = disk.readBlock (da);          // VTOC
     dosVTOCSector = new DosVTOCSector (this, disk, sectorBuffer, da);
-    sectorTypes[da.getBlock ()] = vtocSector;
+    sectorTypes[da.getBlockNo ()] = vtocSector;
 
     DiskAddress catalogStart = disk.getDiskAddress (sectorBuffer[1], sectorBuffer[2]);
 
     if (dosVTOCSector.sectorSize != disk.getBlockSize ())
-      System.out.println ("Invalid sector size : " + dosVTOCSector.sectorSize);
-    if (dosVTOCSector.maxSectors != disk.getSectorsPerTrack ())
-      System.out.println ("Invalid sectors per track : " + dosVTOCSector.maxSectors);
+      System.out.printf ("%s - invalid sector size : %d%n", disk.getFile ().getName (),
+          dosVTOCSector.sectorSize);
+    if (dosVTOCSector.maxSectors != disk.getBlocksPerTrack ())
+      System.out.printf ("%s - invalid sectors per track : %d%n",
+          disk.getFile ().getName (), dosVTOCSector.maxSectors);
 
     //    sectorTypes[CATALOG_TRACK * dosVTOCSector.maxSectors] = vtocSector;
 
@@ -81,12 +105,12 @@ public class DosDisk extends AbstractFormattedDisk
     rootNode.add (volumeNode);
 
     // flag the catalog sectors before any file mistakenly grabs them
-    da = disk.getDiskAddress (catalogStart.getBlock ());
+    da = disk.getDiskAddress (catalogStart.getBlockNo ());
     do
     {
       if (!disk.isValidAddress (da))
         break;
-      sectorBuffer = disk.readSector (da);
+      sectorBuffer = disk.readBlock (da);
       if (!disk.isValidAddress (sectorBuffer[1], sectorBuffer[2]))
         break;
 
@@ -95,50 +119,45 @@ public class DosDisk extends AbstractFormattedDisk
       //      if (sectorBuffer[0] != 0 && (sectorBuffer[0] & 0xFF) != 0xFF && false)
       //      {
       //        System.out
-      //            .println ("Dos catalog sector buffer byte #0 invalid : " + sectorBuffer[0]);
+      //       .println ("Dos catalog sector buffer byte #0 invalid : " + sectorBuffer[0]);
       //        break;
       //      }
 
-      sectorTypes[da.getBlock ()] = catalogSector;
+      sectorTypes[da.getBlockNo ()] = catalogSector;
 
       int track = sectorBuffer[1] & 0xFF;
       int sector = sectorBuffer[2] & 0xFF;
       if (!disk.isValidAddress (track, sector))
         break;
 
-      //      int thisBlock = da.getBlock ();
       da = disk.getDiskAddress (track, sector);
 
-      //      if (CHECK_SELF_POINTER && da.getBlock () == thisBlock)
-      //        break;
-
-    } while (da.getBlock () != 0);
+    } while (!da.isZero ());
 
     // same loop, but now all the catalog sectors are properly flagged
-    da = disk.getDiskAddress (catalogStart.getBlock ());
-    do
+    da = disk.getDiskAddress (catalogStart.getBlockNo ());
+    loop: do
     {
       if (!disk.isValidAddress (da))
         break;
-      sectorBuffer = disk.readSector (da);
+      sectorBuffer = disk.readBlock (da);
       if (!disk.isValidAddress (sectorBuffer[1], sectorBuffer[2]))
         break;
 
       for (int ptr = 11; ptr < 256; ptr += ENTRY_SIZE)
       {
         if (sectorBuffer[ptr] == 0)         // empty slot, no more catalog entries
-          continue;
+          break loop;
 
-        byte[] entry = new byte[ENTRY_SIZE];
-        System.arraycopy (sectorBuffer, ptr, entry, 0, ENTRY_SIZE);
-        int track = entry[0] & 0xFF;
-        boolean deletedFlag = (entry[0] & 0x80) != 0;
+        byte[] entryBuffer = new byte[ENTRY_SIZE];
+        System.arraycopy (sectorBuffer, ptr, entryBuffer, 0, ENTRY_SIZE);
+        int track = entryBuffer[0] & 0xFF;
+        boolean deletedFlag = (entryBuffer[0] & 0x80) != 0;
 
-        //        if (entry[0] == (byte) 0xFF)              // deleted file
         if (deletedFlag)              // deleted file
         {
           DeletedCatalogEntry deletedCatalogEntry =
-              new DeletedCatalogEntry (this, da, entry, dosVTOCSector.dosVersion);
+              new DeletedCatalogEntry (this, da, entryBuffer, dosVTOCSector.dosVersion);
           deletedFileEntries.add (deletedCatalogEntry);
           DefaultMutableTreeNode node = new DefaultMutableTreeNode (deletedCatalogEntry);
           node.setAllowsChildren (false);
@@ -146,7 +165,7 @@ public class DosDisk extends AbstractFormattedDisk
         }
         else
         {
-          CatalogEntry catalogEntry = new CatalogEntry (this, da, entry);
+          CatalogEntry catalogEntry = new CatalogEntry (this, da, entryBuffer);
           fileEntries.add (catalogEntry);
           DefaultMutableTreeNode node = new DefaultMutableTreeNode (catalogEntry);
           node.setAllowsChildren (false);
@@ -167,7 +186,7 @@ public class DosDisk extends AbstractFormattedDisk
 
       da = disk.getDiskAddress (sectorBuffer[1], sectorBuffer[2]);
 
-    } while (da.getBlock () != 0);
+    } while (!da.isZero ());
 
     // link double hi-res files
     for (AppleFileSource fe : fileEntries)
@@ -181,7 +200,6 @@ public class DosDisk extends AbstractFormattedDisk
           if (fe2.getUniqueName ().equals (partner1)
               || fe2.getUniqueName ().equals (partner2))
           {
-            //            System.out.printf ("%s   %s%n", name, partner1);
             ((CatalogEntry) fe2).link ((CatalogEntry) fe);
             ((CatalogEntry) fe).link ((CatalogEntry) fe2);
           }
@@ -189,13 +207,13 @@ public class DosDisk extends AbstractFormattedDisk
     }
 
     // add up all the free and used sectors, and label DOS sectors while we're here
-    int lastDosSector = dosVTOCSector.maxSectors * 3; // first three tracks
+    int lastDosSector = dosVTOCSector.maxSectors * 3;       // first three tracks
     for (DiskAddress da2 : disk)
     {
-      int blockNo = da2.getBlock ();
+      int blockNo = da2.getBlockNo ();
       if (blockNo < lastDosSector) // in the DOS region
       {
-        if (freeBlocks.get (blockNo)) // according to the VTOC
+        if (freeBlocks.get (blockNo))                       // according to the VTOC
           ++freeSectors;
         else
         {
@@ -206,7 +224,7 @@ public class DosDisk extends AbstractFormattedDisk
       }
       else
       {
-        if (stillAvailable (da2)) // free or used, ie not specifically labelled
+        if (stillAvailable (da2))       // free or used, ie not specifically labelled
           ++freeSectors;
         else
           ++usedSectors;
@@ -224,48 +242,81 @@ public class DosDisk extends AbstractFormattedDisk
       deletedFilesNode.setUserObject (getDeletedList ());
       makeNodeVisible (deletedFilesNode.getFirstLeaf ());
     }
+
     volumeNode.setUserObject (getCatalog ());
     makeNodeVisible (volumeNode.getFirstLeaf ());
   }
 
+  // ---------------------------------------------------------------------------------//
+  //  private int getVolumeNo ()
+  //  // ---------------------------------------------------------------------------------//
+  //  {
+  //    return volumeNo;
+  //  }
+
+  // ---------------------------------------------------------------------------------//
   @Override
   public void setOriginalPath (Path path)
+  // ---------------------------------------------------------------------------------//
   {
     super.setOriginalPath (path);
-    volumeNode.setUserObject (getCatalog ());  // this has already been set in the constructor
+
+    // this has already been set in the constructor
+    volumeNode.setUserObject (getCatalog ());
   }
 
   // Beagle Bros FRAMEUP disk only has one catalog block
   // ARCBOOT.DSK has a catalog which starts at sector 0C
+  // ---------------------------------------------------------------------------------//
   public static boolean isCorrectFormat (AppleDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
-    disk.setInterleave (0);
-    int catalogBlocks = checkFormat (disk);
-    if (catalogBlocks > 3)
-      return true;
-    disk.setInterleave (1);
-    int cb2 = checkFormat (disk);
-    //    if (cb2 > catalogBlocks)
-    if (cb2 > 3)
-      return true;
-    disk.setInterleave (2);
-    if (false)
-    {
-      int cb3 = checkFormat (disk);
-      if (cb3 > 3)
-        return true;
-    }
-    if (catalogBlocks > 0)
+    if (false)            // testing
     {
       disk.setInterleave (1);
       return true;
     }
-    if (cb2 > 0)
-      return true;
-    return false;
+
+    int blocksPerTrack = disk.getBlocksPerTrack ();
+    if (blocksPerTrack > 16 && blocksPerTrack != 32)      // 32 = unidos
+    {
+      if (debug)
+        System.out.printf ("Blocks per track: %d", blocksPerTrack);
+      return false;
+    }
+
+    int[] cb = new int[3];
+    int best = 0;
+    int il = -1;
+    int max = disk.getBlocksPerTrack () == 16 ? 3 : 1;    // no interleave for 13 sector?
+
+    for (int interleave = 0; interleave < max; interleave++)
+    {
+      if (debug)
+        System.out.printf ("Checking interleave %d%n", interleave);
+
+      disk.setInterleave (interleave);
+      cb[interleave] = checkFormat (disk);
+      if (cb[interleave] >= 15)
+        return true;
+
+      if (cb[interleave] > best)
+      {
+        best = cb[interleave];
+        il = interleave;
+      }
+    }
+
+    if (best <= 1)
+      return false;
+
+    disk.setInterleave (il);
+    return true;
   }
 
+  // ---------------------------------------------------------------------------------//
   public String getVersionText ()
+  // ---------------------------------------------------------------------------------//
   {
     switch (getVersion ())
     {
@@ -277,26 +328,47 @@ public class DosDisk extends AbstractFormattedDisk
         return "3.3";
       case 0x41:
         return "4.1";
+      case 0x42:
+        return "4.2";
+      case 0x43:
+        return "4.3";
       default:
         return "??";
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   public int getVersion ()
+  // ---------------------------------------------------------------------------------//
   {
     return dosVTOCSector.dosVersion;
   }
 
+  // ---------------------------------------------------------------------------------//
   private static int checkFormat (AppleDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
-    byte[] buffer = disk.readSector (0x11, 0x00);
+    byte[] buffer = disk.readBlock (0x11, 0x00);
 
     // DISCCOMMANDER.DSK uses track 0x17 for the catalog
     //    if (buffer[1] != 0x11) // first catalog track
     //      return 0;
 
-    if (buffer[53] != 16 && buffer[53] != 13)         // tracks per sector
+    // Apple Assembly Language.dsk claims 0x2A tracks per disk
+    //    if (buffer[52] != 35 && buffer[52] != 50)
+    //    {
+    //      if (debug)
+    //        System.out.printf ("Bad tracks per disk : %02X%n", buffer[52]);
+    //      return 0;
+    //    }
+
+    if (debug)
+      System.out.printf ("Sectors per track: %02X%n", buffer[53]);
+
+    if (buffer[53] != 16 && buffer[53] != 13 && buffer[53] != 32)  // sectors per track
     {
+      if (debug)
+        System.out.printf ("Bad sectors per track : %02X%n", buffer[53]);
       return 0;
     }
 
@@ -308,76 +380,109 @@ public class DosDisk extends AbstractFormattedDisk
     //    }
 
     int version = buffer[3] & 0xFF;
-    if (version > 0x42 && version != 0xFF)
+    if (debug)
+      System.out.printf ("Version: %02X%n", buffer[3]);
+    if (version == 0 || (version > 0x43 && version != 0xFF))
     {
-      System.out.printf ("Bad version : %02X%n", version);
+      if (debug)
+        System.out.printf ("Bad version : %02X%n", version);
       return 0;
     }
 
-    return countCatalogBlocks (disk, buffer);
+    int catalogBlocks = countCatalogBlocks (disk, buffer);
+    if (debug)
+      System.out.printf ("Catalog blocks: %s%n", catalogBlocks);
+
+    return catalogBlocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   private static int countCatalogBlocks (AppleDisk disk, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     DiskAddress catalogStart = disk.getDiskAddress (buffer[1], buffer[2]);
-    //    int catalogBlocks = 0;
-    DiskAddress da = disk.getDiskAddress (catalogStart.getBlock ());
-    List<DiskAddress> catalogAddresses = new ArrayList<DiskAddress> ();
+    DiskAddress da = disk.getDiskAddress (catalogStart.getBlockNo ());
+    List<DiskAddress> catalogAddresses = new ArrayList<> ();
 
     do
     {
-      if (!disk.isValidAddress (da))
-        break;
+      if (debug)
+        System.out.printf ("Checking: %s%n", da);
 
-      if (catalogAddresses.contains (da))
+      if (!disk.isValidAddress (da))
       {
-        System.out.println ("Catalog looping");
+        if (debug)
+          System.out.printf ("Invalid address: %s%n", da);
         return 0;
       }
 
-      buffer = disk.readSector (da);
+      if (isDuplicate (catalogAddresses, da))
+      {
+        if (debug)
+          System.out.println ("Catalog looping");
+        return 0;
+      }
+
+      buffer = disk.readBlock (da);
       if (!disk.isValidAddress (buffer[1], buffer[2]))
       {
-        System.out.printf ("Invalid address : %02X / %02X%n", buffer[1], buffer[2]);
-        break;
+        if (debug)
+          System.out.printf ("Invalid address: %02X %02X%n", buffer[1], buffer[2]);
+        return catalogAddresses.size ();
       }
 
       catalogAddresses.add (da);
-      //      catalogBlocks++;
-      //      if (catalogBlocks > 1000)     // looping
-      //      {
-      //        System.out.println ("Disk appears to be looping in countCatalogBlocks()");
-      //        return 0;
-      //      }
 
-      //      int thisBlock = da.getBlock ();
       da = disk.getDiskAddress (buffer[1], buffer[2]);
 
-    } while (da.getBlock () != 0);
+    } while (!da.isZero ());
 
-    //    if (catalogBlocks != catalogAddresses.size ())
-    //      System.out.printf ("CB: %d, size: %d%n", catalogBlocks, catalogAddresses.size ());
+    if (debug)
+      System.out.printf ("Catalog blocks: %d%n", catalogAddresses.size ());
     return catalogAddresses.size ();
   }
 
+  // ---------------------------------------------------------------------------------//
+  private static boolean isDuplicate (List<DiskAddress> catalogAddresses, DiskAddress da)
+  // ---------------------------------------------------------------------------------//
+  {
+    for (DiskAddress diskAddress : catalogAddresses)
+      if (diskAddress.getBlockNo () == da.getBlockNo ())
+        return true;
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
-    StringBuffer text = new StringBuffer (dosVTOCSector.toString ());
+    StringBuilder text = new StringBuilder ();
+
+    text.append (String.format ("Disk name ............. %s%n", getDisplayPath ()));
+    text.append (
+        String.format ("DOS version ........... %s%n", dosVTOCSector.dosVersion));
+    text.append (
+        String.format ("Sectors per track ..... %d%n", dosVTOCSector.maxSectors));
+    text.append (String.format ("Volume no ............. %d%n", volumeNo));
+    text.append (String.format ("Interleave ............ %d", disk.getInterleave ()));
+
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DataSource getFormattedSector (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
-    SectorType type = sectorTypes[da.getBlock ()];
+    SectorType type = sectorTypes[da.getBlockNo ()];
     if (type == vtocSector)
       return dosVTOCSector;
-    if (da.getBlock () == 0)
+    if (da.isZero ())
       return bootSector;
 
-    byte[] buffer = disk.readSector (da);
-    String address = String.format ("%02X %02X", da.getTrack (), da.getSector ());
+    byte[] buffer = disk.readBlock (da);
+    String address = String.format ("%02X %02X", da.getTrackNo (), da.getSectorNo ());
 
     if (type == tsListSector)
       return new DosTSListSector (getSectorFilename (da), disk, buffer, da);
@@ -391,28 +496,34 @@ public class DosDisk extends AbstractFormattedDisk
     return super.getFormattedSector (da);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getFileSectors (int fileNo)
+  // ---------------------------------------------------------------------------------//
   {
     if (fileEntries.size () > 0 && fileEntries.size () > fileNo)
       return fileEntries.get (fileNo).getSectors ();
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public AppleFileSource getCatalog ()
+  // ---------------------------------------------------------------------------------//
   {
     String newLine = String.format ("%n");
     String line = "- --- ---  ------------------------------  -----  -------------"
         + "  -- ----  -------------------" + newLine;
+
     StringBuilder text = new StringBuilder ();
+
     text.append (String.format ("Disk : %s%n%n", getDisplayPath ()));
     text.append ("L Typ Len  Name                            Addr"
         + "   Length         TS Data  Comment" + newLine);
     text.append (line);
 
-    for (AppleFileSource ce : fileEntries)
-      text.append (((CatalogEntry) ce).getDetails () + newLine);
+    for (AppleFileSource fileEntry : fileEntries)
+      text.append (((CatalogEntry) fileEntry).getDetails () + newLine);
 
     text.append (line);
     text.append (String.format (
@@ -424,11 +535,16 @@ public class DosDisk extends AbstractFormattedDisk
           "%nActual:    Free sectors: %3d    "
               + "Used sectors: %3d    Total sectors: %3d",
           freeSectors, usedSectors, (usedSectors + freeSectors)));
-    return new DefaultAppleFileSource ("Volume " + dosVTOCSector.volume, text.toString (),
-        this);
+
+    String volumeText = volumeNo == 0 ? "" : "Side " + volumeNo + " ";
+
+    return new DefaultAppleFileSource (volumeText + "DOS Volume " + dosVTOCSector.volume,
+        text.toString (), this);
   }
 
+  // ---------------------------------------------------------------------------------//
   private AppleFileSource getDeletedList ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text =
         new StringBuilder ("List of files that were deleted from this disk\n");
@@ -443,10 +559,10 @@ public class DosDisk extends AbstractFormattedDisk
    *
     There were actually three versions of DOS 3.3 that Apple released without
     bumping the version number:
-
+  
     The first version that was released had FPBASIC and INTBASIC files that were 50
     sectors in size.
-
+  
     The second version of DOS 3.3, often referred to as “DOS 3.3e”, appeared at the
     time the Apple IIe was released. In this version, the FPBASIC and INTBASIC files
     were 42 sectors in size. The changes introduced at that time included code to turn
@@ -454,12 +570,12 @@ public class DosDisk extends AbstractFormattedDisk
     command. This fix reportedly introduced an even worse bug, but as the command was
     not heavily used it did not make much of an impact on most programmers. The APPEND
     fix was applied by utilizing some formerly unused space in the DOS 3.3 code.
-
+  
     The third version of DOS 3.3 appeared just before the first release of ProDOS.
     The only mention of this in the press was in the DOSTalk column of Softalk magazine.
     This final version of DOS 3.3 included a different fix for the APPEND bug, using
     another bit of unused space in DOS 3.3.
-
+  
     With regard to the FPBASIC and INTBASIC files: There were three differences between
     the 50 sector and the 42 sector versions of the INTBASIC file. Firstly, the
     $F800-$FFFF section was removed. This area was the code for the Monitor, and with

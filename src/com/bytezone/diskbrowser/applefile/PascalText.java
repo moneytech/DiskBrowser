@@ -1,14 +1,20 @@
 package com.bytezone.diskbrowser.applefile;
 
+// -----------------------------------------------------------------------------------//
 public class PascalText extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
+  // ---------------------------------------------------------------------------------//
   public PascalText (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder (getHeader ());
 
@@ -32,15 +38,15 @@ public class PascalText extends AbstractFile
       ptr += line.length () + 1;
     }
 
+    if (text.length () > 0)
+      text.deleteCharAt (text.length () - 1);
+
     return text.toString ();
   }
 
-  private String getHeader ()
-  {
-    return "Name : " + name + "\n\n";
-  }
-
+  // ---------------------------------------------------------------------------------//
   private String getLine (int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder line = new StringBuilder ();
     while (buffer[ptr] != 0x0D)

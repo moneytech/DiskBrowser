@@ -1,8 +1,11 @@
 package com.bytezone.diskbrowser.appleworks;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 abstract class Report
+// -----------------------------------------------------------------------------------//
 {
   static final String line = "-------------------------------------------------------"
       + "-----------------------------------\n";
@@ -37,7 +40,9 @@ abstract class Report
   private final boolean printDash;
   private String fudgeReason;
 
-  public Report (AppleworksADBFile parent, byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
+  Report (AppleworksADBFile parent, byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
   {
     this.parent = parent;
 
@@ -126,24 +131,30 @@ abstract class Report
     if (buffer[offset + 480 + fudge] == 0)      // test high byte
       for (int i = 0; i < 3; i++)
       {
-        selectionRules[i] = HexFormatter.unsignedShort (buffer, offset + 479 + i * 2 + fudge);
-        testTypes[i] = HexFormatter.unsignedShort (buffer, offset + 485 + i * 2 + fudge);
-        continuation[i] = HexFormatter.unsignedShort (buffer, offset + 491 + i * 2 + fudge);
+        selectionRules[i] = Utility.unsignedShort (buffer, offset + 479 + i * 2 + fudge);
+        testTypes[i] = Utility.unsignedShort (buffer, offset + 485 + i * 2 + fudge);
+        continuation[i] = Utility.unsignedShort (buffer, offset + 491 + i * 2 + fudge);
         comparison[i] = pascalString (buffer, offset + 497 + i * 32 + fudge);
       }
     else
       System.out.println ("*** Invalid value in report rules ***");
   }
 
-  public abstract String getText ();
+  // ---------------------------------------------------------------------------------//
+  abstract String getText ();
+  // ---------------------------------------------------------------------------------//
 
+  // ---------------------------------------------------------------------------------//
   protected String pascalString (byte[] buffer, int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     return new String (buffer, ptr + 1, buffer[ptr] & 0xFF);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 

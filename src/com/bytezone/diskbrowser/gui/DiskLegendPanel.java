@@ -5,42 +5,52 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 
-import com.bytezone.common.Platform;
-import com.bytezone.common.Platform.FontSize;
-import com.bytezone.common.Platform.FontType;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 import com.bytezone.diskbrowser.disk.SectorType;
 import com.bytezone.diskbrowser.gui.DiskLayoutPanel.LayoutDetails;
+import com.bytezone.diskbrowser.utilities.FontUtility;
+import com.bytezone.diskbrowser.utilities.FontUtility.FontSize;
+import com.bytezone.diskbrowser.utilities.FontUtility.FontType;
 
+// -----------------------------------------------------------------------------------//
 class DiskLegendPanel extends DiskPanel
+// -----------------------------------------------------------------------------------//
 {
   private static final int LEFT = 3;
   private static final int TOP = 10;
 
   private final Font font;
 
+  // ---------------------------------------------------------------------------------//
   public DiskLegendPanel ()
+  // ---------------------------------------------------------------------------------//
   {
-    font = Platform.getFont (FontType.SANS_SERIF, FontSize.BASE);
+    font = FontUtility.getFont (FontType.SANS_SERIF, FontSize.BASE);
     setBackground (Color.WHITE);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void setDisk (FormattedDisk disk, LayoutDetails details)
+  // ---------------------------------------------------------------------------------//
   {
     super.setDisk (disk, details);
 
     repaint ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public Dimension getPreferredSize ()
+  // ---------------------------------------------------------------------------------//
   {
     return new Dimension (0, 160);            // width/height
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   protected void paintComponent (Graphics g)
+  // ---------------------------------------------------------------------------------//
   {
     super.paintComponent (g);
 

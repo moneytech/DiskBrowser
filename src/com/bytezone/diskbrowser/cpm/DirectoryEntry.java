@@ -14,7 +14,9 @@ import com.bytezone.diskbrowser.gui.DataSource;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
 
 // File Control Block (FCB)
-public class DirectoryEntry implements AppleFileSource
+// -----------------------------------------------------------------------------------//
+class DirectoryEntry implements AppleFileSource
+// -----------------------------------------------------------------------------------//
 {
   private final Disk disk;
   private final CPMDisk parent;
@@ -29,12 +31,14 @@ public class DirectoryEntry implements AppleFileSource
   private final int recordsUsed;                      // records used in this extent
   private final byte[] blockList = new byte[16];      // allocation blocks used
 
-  private final List<DirectoryEntry> entries = new ArrayList<DirectoryEntry> ();
-  private final List<DiskAddress> blocks = new ArrayList<DiskAddress> ();
+  private final List<DirectoryEntry> entries = new ArrayList<> ();
+  private final List<DiskAddress> blocks = new ArrayList<> ();
   private final boolean readOnly;
   private final boolean systemFile;
 
-  public DirectoryEntry (CPMDisk parent, byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
+  DirectoryEntry (CPMDisk parent, byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
   {
     this.parent = parent;
     disk = parent.getDisk ();
@@ -75,18 +79,24 @@ public class DirectoryEntry implements AppleFileSource
     }
   }
 
-  public String getType ()
+  // ---------------------------------------------------------------------------------//
+  String getType ()
+  // ---------------------------------------------------------------------------------//
   {
     return type;
   }
 
-  public boolean matches (DirectoryEntry directoryEntry)
+  // ---------------------------------------------------------------------------------//
+  boolean matches (DirectoryEntry directoryEntry)
+  // ---------------------------------------------------------------------------------//
   {
     return userNumber == directoryEntry.userNumber && name.equals (directoryEntry.name)
         && type.equals (directoryEntry.type);
   }
 
-  public void add (DirectoryEntry entry)
+  // ---------------------------------------------------------------------------------//
+  void add (DirectoryEntry entry)
+  // ---------------------------------------------------------------------------------//
   {
     entries.add (entry);
 
@@ -102,8 +112,10 @@ public class DirectoryEntry implements AppleFileSource
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public boolean contains (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
     for (DiskAddress sector : blocks)
       if (sector.matches (da))
@@ -111,7 +123,9 @@ public class DirectoryEntry implements AppleFileSource
     return false;
   }
 
-  public String line ()
+  // ---------------------------------------------------------------------------------//
+  String line ()
+  // ---------------------------------------------------------------------------------//
   {
     String bytes = HexFormatter.getHexString (blockList, 0, 16);
     bytes = bytes.replaceAll ("00", "  ");
@@ -131,7 +145,9 @@ public class DirectoryEntry implements AppleFileSource
     return text;
   }
 
-  public String toDetailedString ()
+  // ---------------------------------------------------------------------------------//
+  String toDetailedString ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -156,19 +172,23 @@ public class DirectoryEntry implements AppleFileSource
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getUniqueName ()
+  // ---------------------------------------------------------------------------------//
   {
     return name + "." + type;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DataSource getDataSource ()
+  // ---------------------------------------------------------------------------------//
   {
     if (appleFile != null)
       return appleFile;
 
-    byte[] buffer = disk.readSectors (blocks);
+    byte[] buffer = disk.readBlocks (blocks);
 
     if (buffer.length == 0)
     {
@@ -208,20 +228,26 @@ public class DirectoryEntry implements AppleFileSource
     return appleFile;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getSectors ()
+  // ---------------------------------------------------------------------------------//
   {
     return blocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public FormattedDisk getFormattedDisk ()
+  // ---------------------------------------------------------------------------------//
   {
     return parent;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     return name + "." + type;
   }

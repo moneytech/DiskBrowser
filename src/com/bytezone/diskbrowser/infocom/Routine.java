@@ -4,31 +4,41 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import com.bytezone.diskbrowser.infocom.Instruction.Operand;
+import com.bytezone.diskbrowser.infocom.Instruction.OperandType;
+import com.bytezone.diskbrowser.utilities.HexFormatter;
+
+// -----------------------------------------------------------------------------------//
 class Routine extends InfocomAbstractFile
     implements Iterable<Instruction>, Comparable<Routine>
+// -----------------------------------------------------------------------------------//
 {
-  private static final String padding = "                             ";
-
   int startPtr, length, strings, locals;
-  //  private final Header header;
 
-  List<Parameter> parameters = new ArrayList<Parameter> ();
-  List<Instruction> instructions = new ArrayList<Instruction> ();
-  List<Integer> calls = new ArrayList<Integer> ();
-  List<Integer> calledBy = new ArrayList<Integer> ();
-  List<Integer> actions = new ArrayList<Integer> ();          // not used yet
+  List<Parameter> parameters = new ArrayList<> ();
+  List<Instruction> instructions = new ArrayList<> ();
+  List<Integer> calls = new ArrayList<> ();
+  List<Integer> calledBy = new ArrayList<> ();
+  List<Integer> actions = new ArrayList<> ();          // not used yet
+  List<Integer> targets = new ArrayList<> ();
 
-  public Routine (int ptr, Header header, int caller)
+  // ---------------------------------------------------------------------------------//
+  Routine (int ptr, Header header, int caller)
+  // ---------------------------------------------------------------------------------//
   {
     super (String.format ("Routine %05X", ptr), header.buffer);
-    //    this.header = header;
 
     locals = buffer[ptr] & 0xFF;
     if (locals > 15)
-      return;
+    {
+      System.out.println ("Too many locals: " + locals);
+      return;                                     // startPtr will be zero
+    }
 
     startPtr = ptr++;                             // also used to flag a valid routine
-    calledBy.add (caller);
+
+    if (!calledBy.contains (caller))
+      calledBy.add (caller);
 
     for (int i = 1; i <= locals; i++)
     {
@@ -53,16 +63,29 @@ class Routine extends InfocomAbstractFile
       if (instruction.isPrint ())
         strings++;
 
-      ptr += instruction.length ();
+      if (instruction.isBranch () && !targets.contains (instruction.target ()))
+        targets.add (instruction.target ());
+
+      if (instruction.isJump () && !targets.contains (instruction.target ()))
+        targets.add (instruction.target ());
+
+      for (Operand operand : instruction.opcode.operands)
+        if (operand.operandType == OperandType.VAR_GLOBAL)
+          header.globals.addRoutine (this, operand);
+
+      ptr += instruction.length ();       // point to next instruction
+      if (isTarget (ptr))
+        continue;
 
       // is it a backwards jump?
-      if (instruction.isJump () && instruction.target () < ptr && !moreCode (ptr))
+      if (instruction.isJump () && instruction.target () < ptr)
         break;
 
       // is it an unconditional return?
-      if (instruction.isReturn () && !moreCode (ptr))
+      if (instruction.isReturn ())
         break;
     }
+
     length = ptr - startPtr;
 
     hexBlocks.add (new HexBlock (startPtr, length, null));
@@ -71,22 +94,47 @@ class Routine extends InfocomAbstractFile
     if (true)
     {
       int endPtr = startPtr + length;
-      for (Instruction ins : instructions)
+      for (Instruction instruction : instructions)
       {
-        int target = ins.target () > 256 ? ins.target ()
-            : ins.opcode.jumpTarget > 256 ? ins.opcode.jumpTarget : 0;
+        int target = instruction.target () > 256 ? instruction.target ()
+            : instruction.opcode.jumpTarget > 256 ? instruction.opcode.jumpTarget : 0;
         if (target == 0)
           continue;
-        if (ins.isBranch () && (target > endPtr || target < startPtr))
-          System.out.println (ins);
-        if (ins.isJump () && (target > endPtr || target < startPtr))
-          System.out.println (ins);
+        if (instruction.isBranch () && (target > endPtr || target < startPtr))
+          System.out.println (instruction);
+        if (instruction.isJump () && (target > endPtr || target < startPtr))
+          System.out.println (instruction);
       }
     }
   }
 
+  // ---------------------------------------------------------------------------------//
+  String dump ()
+  // ---------------------------------------------------------------------------------//
+  {
+    StringBuilder text = new StringBuilder ();
+    text.append (String.format ("%05X : %s", startPtr,
+        HexFormatter.getHexString (buffer, startPtr, 1 + locals * 2)));
+    text.append ("\n");
+    for (Instruction instruction : instructions)
+    {
+      text.append (instruction.dump ());
+      text.append ("\n");
+    }
+    return text.toString ();
+  }
+
+  // ---------------------------------------------------------------------------------//
+  boolean isValid ()
+  // ---------------------------------------------------------------------------------//
+  {
+    return startPtr > 0;
+  }
+
   // test whether the routine contains any instructions pointing to this address
-  private boolean moreCode (int ptr)
+  // ---------------------------------------------------------------------------------//
+  private boolean isTarget (int ptr)
+  // ---------------------------------------------------------------------------------//
   {
     for (Instruction ins : instructions)
     {
@@ -99,27 +147,78 @@ class Routine extends InfocomAbstractFile
     return false;
   }
 
+  // ---------------------------------------------------------------------------------//
   public void addCaller (int caller)
+  // ---------------------------------------------------------------------------------//
   {
     calledBy.add (caller);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
+
     text.append (String.format ("Called by : %3d%n", calledBy.size ()));
-    text.append (String.format ("Calls     : %3d%n%n", calls.size ()));
-    text.append (String.format ("%s%05X : %d%n", padding, startPtr, locals));
+    text.append (String.format ("Calls     : %3d%n", calls.size ()));
+    text.append (String.format ("Length    : %3d%n%n", length));
+
+    text.append (String.format ("%05X : %d%n", startPtr, locals));
+
     for (Parameter parameter : parameters)
-      text.append (padding + parameter.toString () + "\n");
+      text.append (parameter.toString () + "\n");
+
     text.append ("\n");
+
     for (Instruction instruction : instructions)
+    {
+      text.append (instruction.getHex ());
+      int offset = instruction.startPtr;
+      if (targets.contains (offset))
+        text.append ("  L000 ");
+      else
+        text.append ("       ");
       text.append (instruction + "\n");
+    }
+
+    if (calledBy.size () > 0)
+    {
+      text.append ("\n\nCalled by\n\n");
+      for (int i : calledBy)
+        text.append (String.format ("%05X%n", i));
+    }
+
+    if (calls.size () > 0)
+    {
+      text.append ("\n\nCalls\n\n");
+      for (int i : calls)
+        text.append (String.format ("%05X%n", i));
+    }
+
+    if (targets.size () > 0)
+    {
+      text.append ("\n\nTargets\n\n");
+      for (int i : targets)
+        text.append (String.format ("%05X%n", i));
+    }
+
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
+  @Override
+  public String toString ()
+  // ---------------------------------------------------------------------------------//
+  {
+    return String.format ("[Start: %05X, Len: %4d, Strings: %2d, Locals: %2d]", startPtr,
+        length, strings, locals);
+  }
+
+  // ---------------------------------------------------------------------------------//
   class Parameter
+  // ---------------------------------------------------------------------------------//
   {
     int value;
     int sequence;

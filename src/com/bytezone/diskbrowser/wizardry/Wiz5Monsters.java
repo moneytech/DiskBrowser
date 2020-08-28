@@ -4,16 +4,20 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-import com.bytezone.common.Utility;
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
-public class Wiz5Monsters extends AbstractFile implements Iterable<Wiz5Monsters.Monster>
+// -----------------------------------------------------------------------------------//
+class Wiz5Monsters extends AbstractFile implements Iterable<Wiz5Monsters.Monster>
+// -----------------------------------------------------------------------------------//
 {
   private static final int BLOCK_SIZE = 512;
-  private final List<Monster> monsters = new ArrayList<Monster> ();
+  private final List<Monster> monsters = new ArrayList<> ();
 
-  public Wiz5Monsters (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  Wiz5Monsters (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -56,14 +60,18 @@ public class Wiz5Monsters extends AbstractFile implements Iterable<Wiz5Monsters.
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public Iterator<Monster> iterator ()
+  // ---------------------------------------------------------------------------------//
   {
     return monsters.iterator ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -90,10 +98,12 @@ public class Wiz5Monsters extends AbstractFile implements Iterable<Wiz5Monsters.
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   class Monster
+  // ---------------------------------------------------------------------------------//
   {
     private final int id;
-    private final List<DataBuffer> dataBuffers = new ArrayList<DataBuffer> ();
+    private final List<DataBuffer> dataBuffers = new ArrayList<> ();
 
     private Wiz4Image image;
     private byte[] data;
@@ -130,7 +140,7 @@ public class Wiz5Monsters extends AbstractFile implements Iterable<Wiz5Monsters.
 
     List<Integer> getBlocks ()
     {
-      List<Integer> blocks = new ArrayList<Integer> ();
+      List<Integer> blocks = new ArrayList<> ();
       for (DataBuffer dataBuffer : dataBuffers)
         blocks.add (dataBuffer.block);
       return blocks;
@@ -151,7 +161,9 @@ public class Wiz5Monsters extends AbstractFile implements Iterable<Wiz5Monsters.
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   class DataBuffer
+  // ---------------------------------------------------------------------------------//
   {
     private final int block;
     private final int offset;

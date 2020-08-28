@@ -11,8 +11,11 @@ import com.bytezone.diskbrowser.disk.DefaultAppleFileSource;
 import com.bytezone.diskbrowser.disk.DiskAddress;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 class Header
+// -----------------------------------------------------------------------------------//
 {
   static String[] typeText = { "header", "maze", "monsters", "rewards", "items",
                                "characters", "images", "char levels" };
@@ -30,10 +33,12 @@ class Header
 
   String scenarioTitle;
   public int scenarioID;
-  List<ScenarioData> data = new ArrayList<ScenarioData> (8);
+  List<ScenarioData> data = new ArrayList<> (8);
   FormattedDisk owner;
 
-  public Header (DefaultMutableTreeNode dataNode, FormattedDisk owner)
+  // ---------------------------------------------------------------------------------//
+  Header (DefaultMutableTreeNode dataNode, FormattedDisk owner)
+  // ---------------------------------------------------------------------------------//
   {
     this.owner = owner;
 
@@ -98,15 +103,17 @@ class Header
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void linkText (String title, DiskAddress da, DefaultMutableTreeNode headerNode)
+  // ---------------------------------------------------------------------------------//
   {
-    List<DiskAddress> blocks = new ArrayList<DiskAddress> ();
+    List<DiskAddress> blocks = new ArrayList<> ();
     blocks.add (da);
 
     StringBuilder text = new StringBuilder (scenarioTitle + "\n\n");
 
     int ptr = 106;
-    byte[] buffer = owner.getDisk ().readSector (da);
+    byte[] buffer = owner.getDisk ().readBlock (da);
     while (buffer[ptr] != -1)
     {
       text.append (HexFormatter.getPascalString (buffer, ptr) + "\n");
@@ -116,7 +123,7 @@ class Header
     text.append ("\n");
     while (ptr < 512)
     {
-      int value = HexFormatter.intValue (buffer[ptr], buffer[ptr + 1]);
+      int value = Utility.intValue (buffer[ptr], buffer[ptr + 1]);
       text.append (String.format ("%04X  %,6d%n", value, value));
       ptr += 2;
     }
@@ -129,13 +136,15 @@ class Header
     headerNode.add (node);
   }
 
+  // ---------------------------------------------------------------------------------//
   private void linkPictures (String title, DiskAddress da,
       DefaultMutableTreeNode headerNode)
+  // ---------------------------------------------------------------------------------//
   {
-    List<DiskAddress> blocks = new ArrayList<DiskAddress> ();
+    List<DiskAddress> blocks = new ArrayList<> ();
     blocks.add (da);
 
-    byte[] buffer = owner.getDisk ().readSector (da);
+    byte[] buffer = owner.getDisk ().readBlock (da);
     String text = printChars (buffer, 0);
 
     DefaultAppleFileSource dafs = new DefaultAppleFileSource (title, text, owner);
@@ -145,15 +154,17 @@ class Header
     headerNode.add (node);
   }
 
+  // ---------------------------------------------------------------------------------//
   private void linkSpells (String title, DiskAddress da,
       DefaultMutableTreeNode headerNode)
+  // ---------------------------------------------------------------------------------//
   {
-    List<DiskAddress> blocks = new ArrayList<DiskAddress> ();
+    List<DiskAddress> blocks = new ArrayList<> ();
     blocks.add (da);
     int level = 1;
 
     StringBuilder list = new StringBuilder ("Level " + level + ":\n");
-    byte[] buffer = owner.getDisk ().readSector (da);
+    byte[] buffer = owner.getDisk ().readBlock (da);
     String text = HexFormatter.getString (buffer, 0, 512);
     String[] spells = text.split ("\n");
     for (String s : spells)
@@ -177,7 +188,9 @@ class Header
     headerNode.add (node);
   }
 
+  // ---------------------------------------------------------------------------------//
   private String printChars (byte[] buffer, int block)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     for (int i = block * 512; i < (block + 1) * 512; i += 64)
@@ -205,7 +218,9 @@ class Header
   }
 
   // this could be the base factory class for all Wizardry types
+  // ---------------------------------------------------------------------------------//
   class ScenarioData
+  // ---------------------------------------------------------------------------------//
   {
     int dunno;
     int total;
@@ -223,7 +238,7 @@ class Header
       dataOffset = buffer[offset + 48] & 0xFF;
       type = seq;
 
-      this.sectors = new ArrayList<DiskAddress> (totalBlocks);
+      this.sectors = new ArrayList<> (totalBlocks);
       for (int i = dataOffset, max = dataOffset + totalBlocks; i < max; i++)
         if (i < sectors.size ())
           this.sectors.add (sectors.get (i));

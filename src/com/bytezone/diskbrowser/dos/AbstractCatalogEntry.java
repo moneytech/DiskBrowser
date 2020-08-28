@@ -4,16 +4,32 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.bytezone.diskbrowser.applefile.*;
+import com.bytezone.diskbrowser.applefile.AppleFileSource;
+import com.bytezone.diskbrowser.applefile.ApplesoftBasicProgram;
+import com.bytezone.diskbrowser.applefile.AssemblerProgram;
+import com.bytezone.diskbrowser.applefile.DefaultAppleFile;
+import com.bytezone.diskbrowser.applefile.DoubleHiResImage;
+import com.bytezone.diskbrowser.applefile.ErrorMessageFile;
+import com.bytezone.diskbrowser.applefile.FontFile;
+import com.bytezone.diskbrowser.applefile.HiResImage;
+import com.bytezone.diskbrowser.applefile.IntegerBasicProgram;
+import com.bytezone.diskbrowser.applefile.MerlinSource;
+import com.bytezone.diskbrowser.applefile.OriginalHiResImage;
+import com.bytezone.diskbrowser.applefile.PrintShopGraphic;
+import com.bytezone.diskbrowser.applefile.ShapeTable;
+import com.bytezone.diskbrowser.applefile.SimpleText2;
+import com.bytezone.diskbrowser.applefile.TextFile;
+import com.bytezone.diskbrowser.applefile.VisicalcFile;
 import com.bytezone.diskbrowser.disk.Disk;
 import com.bytezone.diskbrowser.disk.DiskAddress;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 import com.bytezone.diskbrowser.dos.DosDisk.FileType;
 import com.bytezone.diskbrowser.gui.DataSource;
-import com.bytezone.diskbrowser.utilities.HexFormatter;
 import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 abstract class AbstractCatalogEntry implements AppleFileSource
+// -----------------------------------------------------------------------------------//
 {
   protected Disk disk;
   protected DosDisk dosDisk;
@@ -27,19 +43,23 @@ abstract class AbstractCatalogEntry implements AppleFileSource
   protected LocalDateTime lastModified;
 
   protected DiskAddress catalogSectorDA;
-  protected final List<DiskAddress> dataSectors = new ArrayList<DiskAddress> ();
-  protected final List<DiskAddress> tsSectors = new ArrayList<DiskAddress> ();
+  protected final List<DiskAddress> dataSectors = new ArrayList<> ();
+  protected final List<DiskAddress> tsSectors = new ArrayList<> ();
 
   private CatalogEntry link;
 
-  public AbstractCatalogEntry (DosDisk dosDisk, DiskAddress catalogSector,
-      byte[] entryBuffer)
+  // ---------------------------------------------------------------------------------//
+  AbstractCatalogEntry (DosDisk dosDisk, DiskAddress catalogSector, byte[] entryBuffer)
+  // ---------------------------------------------------------------------------------//
   {
     this.dosDisk = dosDisk;
     this.disk = dosDisk.getDisk ();
     this.catalogSectorDA = catalogSector;
 
-    reportedSize = HexFormatter.unsignedShort (entryBuffer, 33);
+    name = getName ("", entryBuffer);
+    reportedSize = Utility.unsignedShort (entryBuffer, 33);
+    //    if (reportedSize == 0)
+    //      System.out.printf ("%s size 0%n", name);
 
     int type = entryBuffer[2] & 0x7F;
     locked = (entryBuffer[2] & 0x80) != 0;
@@ -50,35 +70,41 @@ abstract class AbstractCatalogEntry implements AppleFileSource
       fileType = FileType.IntegerBasic;
     else if ((type == 0x02))
       fileType = FileType.ApplesoftBasic;
-    else if ((type == 0x04))
+    else if ((type < 0x08))
       fileType = FileType.Binary;
-    else if ((type == 0x08))
+    else if ((type < 0x10))
       fileType = FileType.SS;
-    else if ((type == 0x10))
+    else if ((type < 0x20))
       fileType = FileType.Relocatable;
-    else if ((type == 0x20))
+    else if ((type < 0x40))
       fileType = FileType.AA;
-    else if ((type == 0x40))          // Lisa
-      fileType = FileType.BB;
+    //    else if ((type == 0x40))          // Lisa
     else
-      System.out.println ("Unknown file type : " + type);
+      fileType = FileType.BB;
+    //    else
+    //    {
+    //      System.out.println ("Unknown file type : " + type);
+    //    }
 
-    name = getName ("", entryBuffer);
     if (dosDisk.getVersion () >= 0x41)
       lastModified = Utility.getDateTime (entryBuffer, 0x1B);
 
     // CATALOG command only formats the LO byte - see Beneath Apple DOS pp4-6
-    String base = String.format ("%s%s %03d ", (locked) ? "*" : " ", getFileType (),
-        (entryBuffer[33] & 0xFF));
-    catalogName = getName (base, entryBuffer);
+    String base =
+        String.format ("%s%s %03d ", (locked) ? "*" : " ", getFileType (), reportedSize);
+    catalogName = getName (base, entryBuffer).replace ("^", "");
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getName (String base, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder (base);
+
     int max = buffer[0] == (byte) 0xFF ? 32 : 33;
     if (dosDisk.getVersion () >= 0x41)
       max = 27;
+
     for (int i = 3; i < max; i++)
     {
       int c = buffer[i] & 0xFF;
@@ -95,14 +121,22 @@ abstract class AbstractCatalogEntry implements AppleFileSource
       else
         text.append ((char) c);                     // standard ascii
     }
+
     while (text.length () > 0 && text.charAt (text.length () - 1) == ' ')
       text.deleteCharAt (text.length () - 1);       // rtrim()
+
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   protected String getFileType ()
+  // ---------------------------------------------------------------------------------//
   {
-    switch (this.fileType)
+    if (fileType == null)
+    {
+      return "?";
+    }
+    switch (fileType)
     {
       case Text:
         return "T";
@@ -128,20 +162,24 @@ abstract class AbstractCatalogEntry implements AppleFileSource
 
   // maybe this should be in the FormattedDisk
   // maybe DiskAddress should have a 'valid' flag
+  // ---------------------------------------------------------------------------------//
   protected DiskAddress getValidAddress (byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
   {
     if (disk.isValidAddress (buffer[offset], buffer[offset + 1]))
       return disk.getDiskAddress (buffer[offset], buffer[offset + 1]);
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DataSource getDataSource ()
+  // ---------------------------------------------------------------------------------//
   {
     if (appleFile != null)
       return appleFile;
 
-    byte[] buffer = disk.readSectors (dataSectors);
+    byte[] buffer = disk.readBlocks (dataSectors);
     int reportedLength;
     if (buffer.length == 0)
     {
@@ -163,25 +201,25 @@ abstract class AbstractCatalogEntry implements AppleFileSource
           break;
 
         case IntegerBasic:
-          reportedLength = HexFormatter.unsignedShort (buffer, 0);
+          reportedLength = Utility.unsignedShort (buffer, 0);
           exactBuffer = new byte[reportedLength];
           System.arraycopy (buffer, 2, exactBuffer, 0, reportedLength);
           appleFile = new IntegerBasicProgram (name, exactBuffer);
           break;
 
         case ApplesoftBasic:
-          reportedLength = HexFormatter.unsignedShort (buffer, 0);
+          reportedLength = Utility.unsignedShort (buffer, 0);
           exactBuffer = new byte[reportedLength];
           if (reportedLength > buffer.length)
             reportedLength = buffer.length - 2;
           System.arraycopy (buffer, 2, exactBuffer, 0, reportedLength);
-          appleFile = new BasicProgram (name, exactBuffer);
+          appleFile = new ApplesoftBasicProgram (name, exactBuffer);
           break;
 
         case Binary:                        // binary file
         case Relocatable:                   // relocatable binary file
-          int loadAddress = HexFormatter.unsignedShort (buffer, 0);
-          reportedLength = HexFormatter.unsignedShort (buffer, 2);
+          int loadAddress = Utility.unsignedShort (buffer, 0);
+          reportedLength = Utility.unsignedShort (buffer, 2);
           if (reportedLength == 0)
           {
             System.out.println (name.trim () + " reported length : 0 - reverting to "
@@ -199,7 +237,7 @@ abstract class AbstractCatalogEntry implements AppleFileSource
           if ((name.endsWith (".FONT") || name.endsWith (" FONT")
               || name.endsWith (".SET") || name.startsWith ("ASCII."))
               && FontFile.isFont (exactBuffer))
-            appleFile = new FontFile (name, exactBuffer);
+            appleFile = new FontFile (name, exactBuffer, loadAddress);
           else if (ShapeTable.isShapeTable (exactBuffer))
             appleFile = new ShapeTable (name, exactBuffer);
           else if (name.endsWith (".S"))
@@ -214,7 +252,7 @@ abstract class AbstractCatalogEntry implements AppleFileSource
             appleFile = new DoubleHiResImage (name, exactBuffer);
           else if (link != null)
           {
-            byte[] auxBuffer = link.disk.readSectors (link.dataSectors);
+            byte[] auxBuffer = link.disk.readBlocks (link.dataSectors);
             byte[] exactAuxBuffer = getExactBuffer (auxBuffer);
             if (name.endsWith (".AUX"))
               appleFile = new DoubleHiResImage (name, exactAuxBuffer, exactBuffer);
@@ -238,7 +276,7 @@ abstract class AbstractCatalogEntry implements AppleFileSource
           {
             byte[] buf = new byte[exactBuffer.length - 4];
             System.arraycopy (exactBuffer, 4, buf, 0, buf.length);
-            appleFile = new BasicProgram (name, buf);
+            appleFile = new ApplesoftBasicProgram (name, buf);
             System.out.printf ("Possible basic binary: %s%n", name);
           }
           else
@@ -261,8 +299,8 @@ abstract class AbstractCatalogEntry implements AppleFileSource
           break;
 
         case BB:                                          // Lisa
-          loadAddress = HexFormatter.intValue (buffer[0], buffer[1]);
-          reportedLength = HexFormatter.intValue (buffer[2], buffer[3]);
+          loadAddress = Utility.intValue (buffer[0], buffer[1]);
+          reportedLength = Utility.intValue (buffer[2], buffer[3]);
           exactBuffer = new byte[reportedLength];
           System.arraycopy (buffer, 4, exactBuffer, 0, reportedLength);
           appleFile = new SimpleText2 (name, exactBuffer, loadAddress);
@@ -282,11 +320,13 @@ abstract class AbstractCatalogEntry implements AppleFileSource
     return appleFile;
   }
 
+  // ---------------------------------------------------------------------------------//
   private byte[] getExactBuffer (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     byte[] exactBuffer;
 
-    int reportedLength = HexFormatter.unsignedShort (buffer, 2);
+    int reportedLength = Utility.unsignedShort (buffer, 2);
     if (reportedLength == 0)
     {
       System.out.println (
@@ -304,14 +344,18 @@ abstract class AbstractCatalogEntry implements AppleFileSource
     return exactBuffer;
   }
 
+  // ---------------------------------------------------------------------------------//
   private boolean isRunCommand (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     // see Stargate - Disk 1, Side A.woz
     return buffer[0] == 0x4C && buffer[1] == (byte) 0xFC && buffer[2] == (byte) 0xA4
         && buffer[3] == 0x00;
   }
 
+  // ---------------------------------------------------------------------------------//
   private boolean isScrunched (int reportedLength)
+  // ---------------------------------------------------------------------------------//
   {
     if ((name.equals ("FLY LOGO") || name.equals ("FLY LOGO SCRUNCHED"))
         && reportedLength == 0x14FA)
@@ -323,8 +367,10 @@ abstract class AbstractCatalogEntry implements AppleFileSource
     return false;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public boolean contains (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
     for (DiskAddress sector : tsSectors)
       if (sector.matches (da))
@@ -339,36 +385,46 @@ abstract class AbstractCatalogEntry implements AppleFileSource
     return false;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getUniqueName ()
+  // ---------------------------------------------------------------------------------//
   {
     // this might not be unique if the file has been deleted
     return name;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public FormattedDisk getFormattedDisk ()
+  // ---------------------------------------------------------------------------------//
   {
     return dosDisk;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getSectors ()
+  // ---------------------------------------------------------------------------------//
   {
-    List<DiskAddress> sectors = new ArrayList<DiskAddress> ();
+    List<DiskAddress> sectors = new ArrayList<> ();
     sectors.add (catalogSectorDA);
     sectors.addAll (tsSectors);
     sectors.addAll (dataSectors);
     return sectors;
   }
 
+  // ---------------------------------------------------------------------------------//
   void link (CatalogEntry catalogEntry)
+  // ---------------------------------------------------------------------------------//
   {
     this.link = catalogEntry;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     return catalogName;
   }

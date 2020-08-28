@@ -3,19 +3,25 @@ package com.bytezone.diskbrowser.dos;
 import com.bytezone.diskbrowser.disk.AbstractSector;
 import com.bytezone.diskbrowser.disk.Disk;
 import com.bytezone.diskbrowser.disk.DiskAddress;
-import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 class DosTSListSector extends AbstractSector
+// -----------------------------------------------------------------------------------//
 {
   private final String name;
 
-  public DosTSListSector (String name, Disk disk, byte[] buffer, DiskAddress diskAddress)
+  // ---------------------------------------------------------------------------------//
+  DosTSListSector (String name, Disk disk, byte[] buffer, DiskAddress diskAddress)
+  // ---------------------------------------------------------------------------------//
   {
     super (disk, buffer, diskAddress);
     this.name = name;
   }
 
+  // ---------------------------------------------------------------------------------//
   public boolean isValid (DosDisk dosDisk)
+  // ---------------------------------------------------------------------------------//
   {
     // what is the count of blocks? does it match? this sector can't tell, there
     // might be more than one TS list
@@ -30,7 +36,7 @@ class DosTSListSector extends AbstractSector
         break;            // throw exception?
       }
 
-      if (da.getBlock () > 0 && dosDisk.stillAvailable (da))
+      if (da.getBlockNo () > 0 && dosDisk.stillAvailable (da))
       {
         System.out.println ("Invalid sector address : " + da);
         break;            // throw exception?
@@ -40,28 +46,43 @@ class DosTSListSector extends AbstractSector
   }
 
   // this is in too many places
+  // ---------------------------------------------------------------------------------//
   protected DiskAddress getValidAddress (byte[] buffer, int offset)
+  // ---------------------------------------------------------------------------------//
   {
     if (disk.isValidAddress (buffer[offset], buffer[offset + 1]))
       return disk.getDiskAddress (buffer[offset], buffer[offset + 1]);
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String createText ()
+  // ---------------------------------------------------------------------------------//
   {
     DiskAddress da = disk.getDiskAddress (buffer[1], buffer[2]);
+    if (da == null)
+      return String.format ("Invalid address: %02X %02X", buffer[1], buffer[2]);
+
     String msg = da.matches (diskAddress) ? " (circular reference)" : "";
 
     StringBuilder text = getHeader ("TS List Sector : " + name);
     addText (text, buffer, 0, 1, "Not used");
     addText (text, buffer, 1, 2, "Next TS list track/sector" + msg);
-    addText (text, buffer, 3, 2, "Not used");
+
+    if ((buffer[3] != 0 || buffer[4] != 0)         // not supposed to be used
+        // Diags2E.dsk stores its own sector address here
+        && (diskAddress.getTrackNo () == (buffer[3] & 0xFF)
+            && diskAddress.getSectorNo () == (buffer[4] & 0xFF)))
+      addText (text, buffer, 3, 2, "Self-reference");
+    else
+      addText (text, buffer, 3, 2, "Not used");
+
     addTextAndDecimal (text, buffer, 5, 2, "Sector base number");
     addText (text, buffer, 7, 4, "Not used");
     addText (text, buffer, 11, 1, "Not used");
 
-    int sectorBase = HexFormatter.intValue (buffer[5], buffer[6]);
+    int sectorBase = Utility.intValue (buffer[5], buffer[6]);
 
     for (int i = 12; i <= 255; i += 2)
     {

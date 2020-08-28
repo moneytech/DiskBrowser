@@ -11,25 +11,32 @@ import javax.swing.JOptionPane;
 import javax.swing.tree.DefaultMutableTreeNode;
 
 import com.bytezone.diskbrowser.applefile.AppleFileSource;
-import com.bytezone.diskbrowser.disk.*;
+import com.bytezone.diskbrowser.disk.AbstractFormattedDisk;
+import com.bytezone.diskbrowser.disk.AppleDisk;
+import com.bytezone.diskbrowser.disk.DefaultAppleFileSource;
+import com.bytezone.diskbrowser.disk.Disk;
+import com.bytezone.diskbrowser.disk.DiskAddress;
+import com.bytezone.diskbrowser.disk.SectorType;
 import com.bytezone.diskbrowser.gui.DataSource;
-import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
 // https://mud.co.uk/richard/htflpism.htm
 // https://inform-fiction.org/zmachine/standards/
+// https://github.com/historicalsource?tab=repositories
 
+// -----------------------------------------------------------------------------------//
 public class InfocomDisk extends AbstractFormattedDisk
+// -----------------------------------------------------------------------------------//
 {
   private static final int BLOCK_SIZE = 256;
   private static final boolean TYPE_NODE = true;
   private static final boolean TYPE_LEAF = false;
   private byte[] data;
-  //  private int version;
   private final Header header;
 
   Color green = new Color (0, 200, 0);
 
-  SectorType bootSector = new SectorType ("Boot code", Color.lightGray);
+  SectorType bootSector = new SectorType ("ZIP code", Color.lightGray);
   SectorType stringsSector = new SectorType ("Strings", Color.magenta);
   SectorType objectsSector = new SectorType ("Objects", green);
   SectorType dictionarySector = new SectorType ("Dictionary", Color.blue);
@@ -39,13 +46,15 @@ public class InfocomDisk extends AbstractFormattedDisk
   SectorType globalsSector = new SectorType ("Globals", Color.darkGray);
   SectorType grammarSector = new SectorType ("Grammar", Color.gray);
 
+  // ---------------------------------------------------------------------------------//
   public InfocomDisk (Disk disk)
+  // ---------------------------------------------------------------------------------//
   {
     super (disk);
 
     setInfocomSectorTypes ();
 
-    data = disk.readSector (3, 0);          // read first sector to get file size
+    data = disk.readBlock (3, 0);          // read first sector to get file size
     data = getBuffer (getWord (26) * 2);    // read entire file into data buffer
 
     if (false)
@@ -65,7 +74,7 @@ public class InfocomDisk extends AbstractFormattedDisk
 
     headerNode = addToTree (root, "Header", header, TYPE_LEAF);
     DefaultAppleFileSource dafs = (DefaultAppleFileSource) headerNode.getUserObject ();
-    List<DiskAddress> blocks = new ArrayList<DiskAddress> ();
+    List<DiskAddress> blocks = new ArrayList<> ();
     blocks.add (disk.getDiskAddress (3, 0));
     dafs.setSectors (blocks);
 
@@ -85,16 +94,17 @@ public class InfocomDisk extends AbstractFormattedDisk
     stringsNode = addToTree (root, "Strings", header.stringManager, TYPE_LEAF);
 
     PropertyManager pm = new PropertyManager ("Properties", data, header);
-    pm.addNodes (addToTree (objectNode, "Properties", pm, TYPE_NODE), this);
+    pm.addNodes (addToTree (root, "Properties", pm, TYPE_NODE), this);
 
     AttributeManager am = new AttributeManager ("Attributes", data, header);
-    am.addNodes (addToTree (objectNode, "Attributes", am, TYPE_NODE), this);
+    am.addNodes (addToTree (root, "Attributes", am, TYPE_NODE), this);
 
     sectorTypes[48] = headerSector;
 
-    setSectorTypes (header.abbreviationsTable, header.objectTable, abbreviationsSector,
-        abbreviationsNode);
-    setSectorTypes (header.objectTable, header.globalsOffset, objectsSector, objectNode);
+    setSectorTypes (header.abbreviationsTable, header.objectTableOffset,
+        abbreviationsSector, abbreviationsNode);
+    setSectorTypes (header.objectTableOffset, header.globalsOffset, objectsSector,
+        objectNode);
     setSectorTypes (header.globalsOffset, header.staticMemory, globalsSector,
         globalsNode);
     setSectorTypes (header.staticMemory, header.dictionaryOffset, grammarSector,
@@ -105,7 +115,9 @@ public class InfocomDisk extends AbstractFormattedDisk
     setSectorTypes (header.stringPointer, header.fileLength, stringsSector, stringsNode);
   }
 
+  // ---------------------------------------------------------------------------------//
   protected void setInfocomSectorTypes ()
+  // ---------------------------------------------------------------------------------//
   {
     sectorTypesList.add (bootSector);
     sectorTypesList.add (headerSector);
@@ -119,40 +131,44 @@ public class InfocomDisk extends AbstractFormattedDisk
 
     for (int track = 0; track < 3; track++)
       for (int sector = 0; sector < 16; sector++)
-        if (!disk.isSectorEmpty (track, sector))
+        if (!disk.isBlockEmpty (track, sector))
           sectorTypes[track * 16 + sector] = bootSector;
   }
 
+  // ---------------------------------------------------------------------------------//
   private void setSectorTypes (int sectorFrom, int sectorTo, SectorType type,
       DefaultMutableTreeNode node)
+  // ---------------------------------------------------------------------------------//
   {
     DefaultAppleFileSource dafs = (DefaultAppleFileSource) node.getUserObject ();
-    List<DiskAddress> blocks = new ArrayList<DiskAddress> ();
+    List<DiskAddress> blocks = new ArrayList<> ();
 
     int blockNo = sectorFrom / disk.getBlockSize () + 48;
     int blockTo = sectorTo / disk.getBlockSize () + 48;
     while (blockNo <= blockTo)
     {
       blocks.add (disk.getDiskAddress (blockNo));
-      if (!disk.isSectorEmpty (blockNo))
+      if (!disk.isBlockEmpty (blockNo))
         sectorTypes[blockNo] = type;
       blockNo++;
     }
     dafs.setSectors (blocks);
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getFileSize ()
+  // ---------------------------------------------------------------------------------//
   {
     byte[] buffer = null;
     int startBlock = getWord (4) / 256 + 48;
     int fileSize = 0;
     for (DiskAddress da : disk)
     {
-      if (da.getBlock () > startBlock && disk.isSectorEmpty (da))
+      if (da.getBlockNo () > startBlock && disk.isBlockEmpty (da))
       {
         System.out.println ("Empty : " + da);
-        buffer = disk.readSector (da.getBlock () - 1);
-        fileSize = (da.getBlock () - 48) * disk.getBlockSize ();
+        buffer = disk.readBlock (da.getBlockNo () - 1);
+        fileSize = (da.getBlockNo () - 48) * disk.getBlockSize ();
         break;
       }
     }
@@ -166,7 +182,9 @@ public class InfocomDisk extends AbstractFormattedDisk
     return fileSize;
   }
 
+  // ---------------------------------------------------------------------------------//
   private byte[] getBuffer (int fileSize)
+  // ---------------------------------------------------------------------------------//
   {
     if (fileSize == 0)
       fileSize = getFileSize ();
@@ -175,7 +193,7 @@ public class InfocomDisk extends AbstractFormattedDisk
     for (int track = 3, ptr = 0; track < 35; track++)
       for (int sector = 0; sector < 16; sector++, ptr += BLOCK_SIZE)
       {
-        byte[] temp = disk.readSector (track, sector);
+        byte[] temp = disk.readBlock (track, sector);
         int spaceLeft = fileSize - ptr;
         if (spaceLeft <= BLOCK_SIZE)
         {
@@ -187,8 +205,10 @@ public class InfocomDisk extends AbstractFormattedDisk
     return data;
   }
 
+  // ---------------------------------------------------------------------------------//
   private DefaultMutableTreeNode addToTree (DefaultMutableTreeNode root, String title,
       DataSource af, boolean allowsChildren)
+  // ---------------------------------------------------------------------------------//
   {
     DefaultAppleFileSource dafs = new DefaultAppleFileSource (title, af, this);
 
@@ -199,37 +219,45 @@ public class InfocomDisk extends AbstractFormattedDisk
     return node;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getFileSectors (int fileNo)
+  // ---------------------------------------------------------------------------------//
   {
     return null;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public AppleFileSource getCatalog ()
+  // ---------------------------------------------------------------------------------//
   {
     return new DefaultAppleFileSource (header.getText (), this);
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean isCorrectFormat (AppleDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     disk.setInterleave (2);
     return checkFormat (disk);
   }
 
+  // ---------------------------------------------------------------------------------//
   public static boolean checkFormat (AppleDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
-    byte[] buffer = disk.readSector (3, 0);
+    byte[] buffer = disk.readBlock (3, 0);
 
     int version = buffer[0] & 0xFF;
-    int highMemory = HexFormatter.intValue (buffer[5], buffer[4]);
-    int programCounter = HexFormatter.intValue (buffer[7], buffer[6]);
-    int dictionary = HexFormatter.intValue (buffer[9], buffer[8]);
-    int objectTable = HexFormatter.intValue (buffer[11], buffer[10]);
-    int globals = HexFormatter.intValue (buffer[13], buffer[12]);
-    int staticMemory = HexFormatter.intValue (buffer[15], buffer[14]);
-    int abbreviationsTable = HexFormatter.intValue (buffer[25], buffer[24]);
-    int fileLength = HexFormatter.intValue (buffer[27], buffer[26]);
+    int highMemory = Utility.intValue (buffer[5], buffer[4]);
+    int programCounter = Utility.intValue (buffer[7], buffer[6]);
+    int dictionary = Utility.intValue (buffer[9], buffer[8]);
+    int objectTable = Utility.intValue (buffer[11], buffer[10]);
+    int globals = Utility.intValue (buffer[13], buffer[12]);
+    int staticMemory = Utility.intValue (buffer[15], buffer[14]);
+    int abbreviationsTable = Utility.intValue (buffer[25], buffer[24]);
+    int fileLength = Utility.intValue (buffer[27], buffer[26]);
 
     if (false)
     {
@@ -246,8 +274,8 @@ public class InfocomDisk extends AbstractFormattedDisk
 
     if (abbreviationsTable >= objectTable)
       return false;
-    if (objectTable >= globals)
-      return false;
+    //    if (objectTable >= globals)
+    //      return false;
     if (globals >= staticMemory)
       return false;
     if (staticMemory >= dictionary)
@@ -270,12 +298,16 @@ public class InfocomDisk extends AbstractFormattedDisk
     return true;
   }
 
+  // ---------------------------------------------------------------------------------//
   private int getWord (int offset)
+  // ---------------------------------------------------------------------------------//
   {
     return (((data[offset] << 8) & 0xFF00) | ((data[offset + 1]) & 0xFF));
   }
 
+  // ---------------------------------------------------------------------------------//
   private void createStoryFile (String fileName)
+  // ---------------------------------------------------------------------------------//
   {
     File f = new File (fileName);
     try

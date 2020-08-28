@@ -3,21 +3,25 @@ package com.bytezone.diskbrowser.gui;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.io.File;
 
 import javax.swing.Action;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
 
-import com.bytezone.common.DefaultAction;
 import com.bytezone.diskbrowser.duplicates.DiskDetails;
 import com.bytezone.diskbrowser.duplicates.RootFolderData;
-import com.bytezone.diskbrowser.gui.RootDirectoryAction.RootDirectoryChangeListener;
+import com.bytezone.diskbrowser.utilities.DefaultAction;
 
+// -----------------------------------------------------------------------------------//
 public class DuplicateAction extends DefaultAction implements RootDirectoryChangeListener
+// -----------------------------------------------------------------------------------//
 {
   RootFolderData rootFolderData;
 
+  // ---------------------------------------------------------------------------------//
   public DuplicateAction (RootFolderData rootFolderData)
+  // ---------------------------------------------------------------------------------//
   {
     super ("List disks...", "Display a sortable list of disks",
         "/com/bytezone/diskbrowser/icons/");
@@ -26,20 +30,24 @@ public class DuplicateAction extends DefaultAction implements RootDirectoryChang
 
     setIcon (Action.SMALL_ICON, "save_delete_16.png");
     setIcon (Action.LARGE_ICON_KEY, "save_delete_32.png");
-    int mask = Toolkit.getDefaultToolkit ().getMenuShortcutKeyMask ();
+    int mask = Toolkit.getDefaultToolkit ().getMenuShortcutKeyMaskEx ();
     putValue (Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke (KeyEvent.VK_L, mask));
     setEnabled (rootFolderData.getRootFolder () != null);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
-  public void rootDirectoryChanged (RootFolderData rootFolderData)
+  public void rootDirectoryChanged (File oldRootFolder, File newRootFolder)
+  // ---------------------------------------------------------------------------------//
   {
-    assert rootFolderData == this.rootFolderData;
+    assert rootFolderData.getRootFolder () == newRootFolder;
     setEnabled (rootFolderData.getRootFolder () != null);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void actionPerformed (ActionEvent arg0)
+  // ---------------------------------------------------------------------------------//
   {
     if (rootFolderData.disksWindow == null)
     {
@@ -58,13 +66,17 @@ public class DuplicateAction extends DefaultAction implements RootDirectoryChang
       rootFolderData.disksWindow.setVisible (true);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void addTableSelectionListener (DiskTableSelectionListener listener)
+  // ---------------------------------------------------------------------------------//
   {
     if (!rootFolderData.listeners.contains (listener))
       rootFolderData.listeners.add (listener);
   }
 
+  // ---------------------------------------------------------------------------------//
   public interface DiskTableSelectionListener
+  // ---------------------------------------------------------------------------------//
   {
     public void diskSelected (DiskDetails diskDetails);
   }

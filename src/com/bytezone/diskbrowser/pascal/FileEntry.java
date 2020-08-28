@@ -2,19 +2,31 @@ package com.bytezone.diskbrowser.pascal;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 
-import com.bytezone.diskbrowser.applefile.*;
+import com.bytezone.diskbrowser.applefile.AbstractFile;
+import com.bytezone.diskbrowser.applefile.AssemblerProgram;
+import com.bytezone.diskbrowser.applefile.Charset;
+import com.bytezone.diskbrowser.applefile.DefaultAppleFile;
+import com.bytezone.diskbrowser.applefile.PascalCode;
+import com.bytezone.diskbrowser.applefile.PascalInfo;
+import com.bytezone.diskbrowser.applefile.PascalSegment;
+import com.bytezone.diskbrowser.applefile.PascalText;
 import com.bytezone.diskbrowser.utilities.FileFormatException;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class FileEntry extends CatalogEntry
+// -----------------------------------------------------------------------------------//
 {
   private DefaultMutableTreeNode node;
 
+  // ---------------------------------------------------------------------------------//
   public FileEntry (PascalDisk parent, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (parent, buffer);
 
-    bytesUsedInLastBlock = HexFormatter.intValue (buffer[22], buffer[23]);
+    bytesUsedInLastBlock = Utility.intValue (buffer[22], buffer[23]);
     date = HexFormatter.getPascalDate (buffer, 24);
 
     int max = Math.min (lastBlock, parent.getDisk ().getTotalBlocks ());
@@ -30,18 +42,24 @@ public class FileEntry extends CatalogEntry
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   void setNode (DefaultMutableTreeNode node)
+  // ---------------------------------------------------------------------------------//
   {
     this.node = node;
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setFile (AbstractFile file)
+  // ---------------------------------------------------------------------------------//
   {
     this.file = file;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public AbstractFile getDataSource ()
+  // ---------------------------------------------------------------------------------//
   {
     if (file != null)
       return file;
@@ -99,11 +117,12 @@ public class FileEntry extends CatalogEntry
     return file;
   }
 
+  // ---------------------------------------------------------------------------------//
   private byte[] getExactBuffer ()
+  // ---------------------------------------------------------------------------------//
   {
-    byte[] buffer = parent.getDisk ().readSectors (blocks);
+    byte[] buffer = parent.getDisk ().readBlocks (blocks);
     byte[] exactBuffer;
-    //    System.out.println (HexFormatter.format (buffer));
 
     if (buffer.length > 0 && bytesUsedInLastBlock < 512)
     {

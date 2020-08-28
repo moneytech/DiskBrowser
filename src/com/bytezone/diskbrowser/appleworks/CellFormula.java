@@ -1,19 +1,23 @@
 package com.bytezone.diskbrowser.appleworks;
 
-import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
-public class CellFormula
+// -----------------------------------------------------------------------------------//
+class CellFormula
+// -----------------------------------------------------------------------------------//
 {
-  private static String[] tokens = {//
-        "@Deg", "@Rad", "@Pi", "@True", "@False", "@Not", "@IsBlank", "@IsNA", "@IsError",
-            "@Exp", "@Ln", "@Log", "@Cos", "@Sin", "@Tan", "@ACos", "@ASin", "@ATan2",
-            "@ATan", "@Mod", "@FV", "@PV", "@PMT", "@Term", "@Rate", "@Round", "@Or", "@And",
-            "@Sum", "@Avg", "@Choose", "@Count", "@Error", "@IRR", "@If", "@Int", "@Lookup",
-            "@Max", "@Min", "@NA", "@NPV", "@Sqrt", "@Abs", "", "<>", ">=", "<=", "=", ">",
-            "<", ",", "^", ")", "-", "+", "/", "*", "(", "-", "+", "..." };
+  private static String[] tokens =
+      { "@Deg", "@Rad", "@Pi", "@True", "@False", "@Not", "@IsBlank", "@IsNA", "@IsError",
+        "@Exp", "@Ln", "@Log", "@Cos", "@Sin", "@Tan", "@ACos", "@ASin", "@ATan2",
+        "@ATan", "@Mod", "@FV", "@PV", "@PMT", "@Term", "@Rate", "@Round", "@Or", "@And",
+        "@Sum", "@Avg", "@Choose", "@Count", "@Error", "@IRR", "@If", "@Int", "@Lookup",
+        "@Max", "@Min", "@NA", "@NPV", "@Sqrt", "@Abs", "", "<>", ">=", "<=", "=", ">",
+        "<", ",", "^", ")", "-", "+", "/", "*", "(", "-", "+", "..." };
   String value;
 
-  public CellFormula (Cell cell, byte[] buffer, int offset, int length)
+  // ---------------------------------------------------------------------------------//
+  CellFormula (Cell cell, byte[] buffer, int offset, int length)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
 
@@ -29,7 +33,7 @@ public class CellFormula
       }
       else if (value == 0xFD)
       {
-        double d = HexFormatter.getSANEDouble (buffer, offset + i + 1);
+        double d = Utility.getSANEDouble (buffer, offset + i + 1);
         String num = String.format ("%f", d).trim ();
         while (num.endsWith ("0"))
           num = num.substring (0, num.length () - 1);
@@ -42,7 +46,7 @@ public class CellFormula
       {
         CellAddress address = new CellAddress (buffer, offset + i + 1);
         String cellName =
-              Cell.getCellName (cell.row + address.rowRef, cell.column + address.colRef);
+            Cell.getCellName (cell.row + address.rowRef, cell.column + address.colRef);
         i += 3;
         text.append (cellName);
       }

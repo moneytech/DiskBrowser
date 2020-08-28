@@ -10,11 +10,14 @@ import java.util.Map;
 
 import com.bytezone.diskbrowser.prodos.ProdosConstants;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
-// see big red computer club folder
-public class QuickDrawFont extends AbstractFile
+// see IIGS System 6.0.1 - Disk 5 Fonts.po
+// -----------------------------------------------------------------------------------//
+public class QuickDrawFont extends CharacterList
+// -----------------------------------------------------------------------------------//
 {
-  Map<Integer, Character> characters = new HashMap<Integer, Character> ();
+  Map<Integer, QuickDrawCharacter> qdCharacters = new HashMap<> ();
 
   private boolean corrupt;
   private final int fileType;
@@ -51,7 +54,9 @@ public class QuickDrawFont extends AbstractFile
 
   private BitSet[] strike;        // bit image of all characters
 
+  // ---------------------------------------------------------------------------------//
   public QuickDrawFont (String name, byte[] buffer, int fileType, int auxType)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -67,37 +72,37 @@ public class QuickDrawFont extends AbstractFile
 
     int ptr = nameLength + 1;         // start of header record
 
-    headerSize = HexFormatter.unsignedShort (buffer, ptr);
+    headerSize = Utility.unsignedShort (buffer, ptr);
     fontDefinitionOffset = nameLength + 1 + headerSize * 2;
 
-    fontFamily = HexFormatter.unsignedShort (buffer, ptr + 2);
-    fontStyle = HexFormatter.unsignedShort (buffer, ptr + 4);
-    fontSize = HexFormatter.unsignedShort (buffer, ptr + 6);
+    fontFamily = Utility.unsignedShort (buffer, ptr + 2);
+    fontStyle = Utility.unsignedShort (buffer, ptr + 4);
+    fontSize = Utility.unsignedShort (buffer, ptr + 6);
     versionMajor = buffer[ptr + 8] & 0xFF;
     versionMinor = buffer[ptr + 9] & 0xFF;
-    extent = HexFormatter.unsignedShort (buffer, ptr + 10);
+    extent = Utility.unsignedShort (buffer, ptr + 10);
 
     ptr = fontDefinitionOffset;
 
-    fontType = HexFormatter.unsignedShort (buffer, ptr);
-    firstChar = HexFormatter.unsignedShort (buffer, ptr + 2);
-    lastChar = HexFormatter.unsignedShort (buffer, ptr + 4);
-    widMax = HexFormatter.unsignedShort (buffer, ptr + 6);
-    kernMax = HexFormatter.signedShort (buffer, ptr + 8);
-    nDescent = HexFormatter.signedShort (buffer, ptr + 10);
-    fRectWidth = HexFormatter.unsignedShort (buffer, ptr + 12);
-    fRectHeight = HexFormatter.unsignedShort (buffer, ptr + 14);
+    fontType = Utility.unsignedShort (buffer, ptr);
+    firstChar = Utility.unsignedShort (buffer, ptr + 2);
+    lastChar = Utility.unsignedShort (buffer, ptr + 4);
+    widMax = Utility.unsignedShort (buffer, ptr + 6);
+    kernMax = Utility.signedShort (buffer, ptr + 8);
+    nDescent = Utility.signedShort (buffer, ptr + 10);
+    fRectWidth = Utility.unsignedShort (buffer, ptr + 12);
+    fRectHeight = Utility.unsignedShort (buffer, ptr + 14);
 
-    owTLoc = HexFormatter.unsignedShort (buffer, ptr + 16);
+    owTLoc = Utility.unsignedShort (buffer, ptr + 16);
 
     offsetWidthTableOffset = (ptr + 16) + owTLoc * 2;
     locationTableOffset = offsetWidthTableOffset - (lastChar - firstChar + 3) * 2;
     bitImageOffset = ptr + 26;
 
-    ascent = HexFormatter.unsignedShort (buffer, ptr + 18);
-    descent = HexFormatter.unsignedShort (buffer, ptr + 20);
-    leading = HexFormatter.unsignedShort (buffer, ptr + 22);
-    rowWords = HexFormatter.unsignedShort (buffer, ptr + 24);
+    ascent = Utility.unsignedShort (buffer, ptr + 18);
+    descent = Utility.unsignedShort (buffer, ptr + 20);
+    leading = Utility.unsignedShort (buffer, ptr + 22);
+    rowWords = Utility.unsignedShort (buffer, ptr + 24);
 
     totalCharacters = lastChar - firstChar + 2;       // includes 'missing' character
 
@@ -113,11 +118,14 @@ public class QuickDrawFont extends AbstractFile
 
     createStrike ();
     createCharacters ();
-    if (!corrupt)
-      buildDisplay ();
+    //    buildDisplay ();
+    buildImage (10, 10, 5, 5, widMax, fRectHeight,
+        (int) (Math.sqrt (totalCharacters) + .5));
   }
 
+  // ---------------------------------------------------------------------------------//
   private void createStrike ()
+  // ---------------------------------------------------------------------------------//
   {
     // create bitset for each row
     strike = new BitSet[fRectHeight];
@@ -136,35 +144,34 @@ public class QuickDrawFont extends AbstractFile
       }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void createCharacters ()
+  // ---------------------------------------------------------------------------------//
   {
-    //    System.out.printf ("Total chars: %d%n", totalCharacters);
     for (int i = 0, max = totalCharacters + 1; i < max; i++)
     {
       // index into the strike
-      int location = HexFormatter.unsignedShort (buffer, locationTableOffset + i * 2);
+      int location = Utility.unsignedShort (buffer, locationTableOffset + i * 2);
 
-      //      System.out.printf ("%3d  %04X %n", i, location);
       int j = i + 1;      // next character
       if (j < max)
       {
-        int nextLocation =
-            HexFormatter.unsignedShort (buffer, locationTableOffset + j * 2);
+        int nextLocation = Utility.unsignedShort (buffer, locationTableOffset + j * 2);
         int pixelWidth = nextLocation - location;
-        //        if (pixelWidth < 0)
-        //        {
-        //          System.out.println ("*********** Bad pixelWidth");
-        //          corrupt = true;
-        //          return;
-        //        }
 
         if (pixelWidth > 0)
-          characters.put (i, new Character (location, pixelWidth));
+        {
+          QuickDrawCharacter c = new QuickDrawCharacter (location, pixelWidth);
+          qdCharacters.put (i, c);
+          characters.add (c);
+        }
       }
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void buildDisplay ()
+  // ---------------------------------------------------------------------------------//
   {
     int inset = 10;
     int spacing = 5;
@@ -184,10 +191,10 @@ public class QuickDrawFont extends AbstractFile
 
     for (int i = 0; i < totalCharacters + 1; i++)
     {
-      int pos = characters.containsKey (i) ? i : lastChar + 1;
-      Character character = characters.get (pos);
+      int pos = qdCharacters.containsKey (i) ? i : lastChar + 1;
+      QuickDrawCharacter character = qdCharacters.get (pos);
 
-      // how the character image to be drawn should be positioned with 
+      // how the character image to be drawn should be positioned with
       // respect to the current pen location
       //      int offset = buffer[offsetWidthTableOffset + i * 2 + 1];
       // how far the pen should be advanced after the character is drawn
@@ -206,8 +213,10 @@ public class QuickDrawFont extends AbstractFile
     g2d.dispose ();
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ("Name : " + name + "\n\n");
     text.append ("File type : Font\n");
@@ -250,9 +259,9 @@ public class QuickDrawFont extends AbstractFile
       if (offset == 255 && width == 255)
         continue;
 
-      int location = HexFormatter.unsignedShort (buffer, locationTableOffset + i * 2);
+      int location = Utility.unsignedShort (buffer, locationTableOffset + i * 2);
       int nextLocation =
-          HexFormatter.unsignedShort (buffer, locationTableOffset + (i + 1) * 2);
+          Utility.unsignedShort (buffer, locationTableOffset + (i + 1) * 2);
       int pixelWidth = nextLocation - location;
 
       text.append (String.format (
@@ -260,16 +269,21 @@ public class QuickDrawFont extends AbstractFile
           location, pixelWidth, offset, width));
     }
 
+    //    text.append (super.getText ());
+
     return text.toString ();
   }
 
-  class Character
+  // ---------------------------------------------------------------------------------//
+  class QuickDrawCharacter extends Character
+  // ---------------------------------------------------------------------------------//
   {
-    private final BufferedImage image;
-
-    public Character (int strikeOffset, int strikeWidth)
+    // -------------------------------------------------------------------------------//
+    public QuickDrawCharacter (int strikeOffset, int strikeWidth)
+    // -------------------------------------------------------------------------------//
     {
-      image = new BufferedImage (strikeWidth, fRectHeight, BufferedImage.TYPE_BYTE_GRAY);
+      super (strikeWidth, fRectHeight);
+
       DataBuffer dataBuffer = image.getRaster ().getDataBuffer ();
 
       int element = 0;

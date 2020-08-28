@@ -5,8 +5,11 @@ import java.util.List;
 
 import com.bytezone.diskbrowser.utilities.FileFormatException;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class PascalSegment extends AbstractFile implements PascalConstants
+// -----------------------------------------------------------------------------------//
 {
   private final static int BLOCK_SIZE = 512;
   final int segmentNoHeader;
@@ -30,7 +33,9 @@ public class PascalSegment extends AbstractFile implements PascalConstants
   private List<PascalProcedure> procedures;
   //  private List<MultiDiskAddress> addresses;
 
+  // ---------------------------------------------------------------------------------//
   public PascalSegment (String name, byte[] fullBuffer, int seq, int blockOffset)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, fullBuffer);     // sets this.buffer to the full buffer temporarily
 
@@ -38,14 +43,14 @@ public class PascalSegment extends AbstractFile implements PascalConstants
     //    this.blockOffset = blockOffset;
     //    this.relocator = relocator;
 
-    this.blockNo = HexFormatter.intValue (fullBuffer[seq * 4], fullBuffer[seq * 4 + 1]);
-    this.size = HexFormatter.intValue (fullBuffer[seq * 4 + 2], fullBuffer[seq * 4 + 3]);
+    this.blockNo = Utility.intValue (fullBuffer[seq * 4], fullBuffer[seq * 4 + 1]);
+    this.size = Utility.intValue (fullBuffer[seq * 4 + 2], fullBuffer[seq * 4 + 3]);
 
-    segKind = HexFormatter.intValue (fullBuffer[0xC0 + seq * 2],
-        fullBuffer[0xC0 + seq * 2 + 1]);
+    segKind =
+        Utility.intValue (fullBuffer[0xC0 + seq * 2], fullBuffer[0xC0 + seq * 2 + 1]);
 
-    textAddress = HexFormatter.intValue (fullBuffer[0xE0 + seq * 2],
-        fullBuffer[0xE0 + seq * 2 + 1]);
+    textAddress =
+        Utility.intValue (fullBuffer[0xE0 + seq * 2], fullBuffer[0xE0 + seq * 2 + 1]);
 
     // segment 1 is the main segment, 2-6 are used by the system, and 7
     // onwards is for the program
@@ -60,9 +65,9 @@ public class PascalSegment extends AbstractFile implements PascalConstants
 
     version = (flags & 0xD0) >> 5;
 
-    intrinsSegs1 = HexFormatter.intValue (fullBuffer[0x120 + seq * 4],
-        fullBuffer[0x120 + seq * 4 + 1]);
-    intrinsSegs2 = HexFormatter.intValue (fullBuffer[0x120 + seq * 4 + 2],
+    intrinsSegs1 =
+        Utility.intValue (fullBuffer[0x120 + seq * 4], fullBuffer[0x120 + seq * 4 + 1]);
+    intrinsSegs2 = Utility.intValue (fullBuffer[0x120 + seq * 4 + 2],
         fullBuffer[0x120 + seq * 4 + 3]);
 
     int offset = blockNo * 512;
@@ -114,15 +119,19 @@ public class PascalSegment extends AbstractFile implements PascalConstants
   //    this.addresses = addresses;
   //  }
 
+  // ---------------------------------------------------------------------------------//
   private void buildProcedureList ()
+  // ---------------------------------------------------------------------------------//
   {
-    procedures = new ArrayList<PascalProcedure> (totalProcedures);
+    procedures = new ArrayList<> (totalProcedures);
 
     for (int i = 1; i <= totalProcedures; i++)
       procedures.add (new PascalProcedure (buffer, i));
   }
 
+  // ---------------------------------------------------------------------------------//
   public String toText ()
+  // ---------------------------------------------------------------------------------//
   {
     int sizeInBlocks = (size - 1) / BLOCK_SIZE + 1;
 
@@ -133,8 +142,10 @@ public class PascalSegment extends AbstractFile implements PascalConstants
         getMultiDiskAddresses ());
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     if (procedures == null)
       buildProcedureList ();
@@ -194,7 +205,9 @@ public class PascalSegment extends AbstractFile implements PascalConstants
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getMultiDiskAddresses ()
+  // ---------------------------------------------------------------------------------//
   {
     String multiDiskAddressText = "";
     //    int sizeInBlocks = (size - 1) / BLOCK_SIZE + 1;

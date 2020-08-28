@@ -4,19 +4,53 @@ import java.util.ArrayList;
 import java.util.GregorianCalendar;
 import java.util.List;
 
-import com.bytezone.diskbrowser.applefile.*;
+import com.bytezone.diskbrowser.applefile.ApplesoftBasicProgram;
+import com.bytezone.diskbrowser.applefile.AssemblerProgram;
+import com.bytezone.diskbrowser.applefile.BasicProgramGS;
+import com.bytezone.diskbrowser.applefile.CharacterRom;
+import com.bytezone.diskbrowser.applefile.DefaultAppleFile;
+import com.bytezone.diskbrowser.applefile.DeviceDriver;
+import com.bytezone.diskbrowser.applefile.DosMasterFile;
+import com.bytezone.diskbrowser.applefile.DoubleHiResImage;
+import com.bytezone.diskbrowser.applefile.ErrorMessageFile;
+import com.bytezone.diskbrowser.applefile.ExoBuffer;
+import com.bytezone.diskbrowser.applefile.FaddenHiResImage;
+import com.bytezone.diskbrowser.applefile.FileSystemTranslator;
+import com.bytezone.diskbrowser.applefile.FileTypeDescriptorTable;
+import com.bytezone.diskbrowser.applefile.FinderData;
+import com.bytezone.diskbrowser.applefile.FontFile;
+import com.bytezone.diskbrowser.applefile.HiResImage;
+import com.bytezone.diskbrowser.applefile.IconFile;
+import com.bytezone.diskbrowser.applefile.IntegerBasicProgram;
+import com.bytezone.diskbrowser.applefile.LodeRunner;
+import com.bytezone.diskbrowser.applefile.MerlinSource;
+import com.bytezone.diskbrowser.applefile.ObjectModule;
+import com.bytezone.diskbrowser.applefile.OriginalHiResImage;
+import com.bytezone.diskbrowser.applefile.PascalArea;
+import com.bytezone.diskbrowser.applefile.QuickDrawFont;
+import com.bytezone.diskbrowser.applefile.SHRPictureFile1;
+import com.bytezone.diskbrowser.applefile.SHRPictureFile2;
+import com.bytezone.diskbrowser.applefile.Selector;
+import com.bytezone.diskbrowser.applefile.ShapeTable;
+import com.bytezone.diskbrowser.applefile.SimpleText;
+import com.bytezone.diskbrowser.applefile.StoredVariables;
+import com.bytezone.diskbrowser.applefile.TextBuffer;
+import com.bytezone.diskbrowser.applefile.TextFile;
 import com.bytezone.diskbrowser.appleworks.AppleworksADBFile;
 import com.bytezone.diskbrowser.appleworks.AppleworksSSFile;
 import com.bytezone.diskbrowser.appleworks.AppleworksWPFile;
 import com.bytezone.diskbrowser.disk.DiskAddress;
 import com.bytezone.diskbrowser.gui.DataSource;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
 // - Set sector types for each used sector
 // - Populate dataBlocks, indexBlocks, catalogBlock and masterIndexBlock
 // - Provide getDataSource ()
 
+// -----------------------------------------------------------------------------------//
 class FileEntry extends CatalogEntry implements ProdosConstants
+// -----------------------------------------------------------------------------------//
 {
   private final int fileType;
   final int keyPtr;
@@ -24,18 +58,20 @@ class FileEntry extends CatalogEntry implements ProdosConstants
   private final int endOfFile;
   private final int auxType;
   private final GregorianCalendar modified;
-  //  private final int headerPointer;
+  private final int headerPointer;
   private DataSource file;
   private final DiskAddress catalogBlock;
 
   private DiskAddress masterIndexBlock;
-  private final List<DiskAddress> indexBlocks = new ArrayList<DiskAddress> ();
+  private final List<DiskAddress> indexBlocks = new ArrayList<> ();
 
   private boolean invalid;
   private FileEntry link;
 
-  public FileEntry (ProdosDisk fDisk, byte[] entryBuffer, DirectoryHeader parent,
+  // ---------------------------------------------------------------------------------//
+  FileEntry (ProdosDisk fDisk, byte[] entryBuffer, DirectoryHeader parent,
       int parentBlock)
+  // ---------------------------------------------------------------------------------//
   {
     super (fDisk, entryBuffer);
 
@@ -44,13 +80,13 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     this.catalogBlock = this.disk.getDiskAddress (parentBlock);
 
     fileType = entryBuffer[0x10] & 0xFF;
-    keyPtr = HexFormatter.unsignedShort (entryBuffer, 0x11);
-    blocksUsed = HexFormatter.unsignedShort (entryBuffer, 0x13);
-    endOfFile = HexFormatter.intValue (entryBuffer[21], entryBuffer[22], entryBuffer[23]);
+    keyPtr = Utility.unsignedShort (entryBuffer, 0x11);
+    blocksUsed = Utility.unsignedShort (entryBuffer, 0x13);
+    endOfFile = Utility.intValue (entryBuffer[21], entryBuffer[22], entryBuffer[23]);
 
-    auxType = HexFormatter.unsignedShort (entryBuffer, 0x1F);
+    auxType = Utility.unsignedShort (entryBuffer, 0x1F);
     modified = HexFormatter.getAppleDate (entryBuffer, 0x21);
-    //    headerPointer = HexFormatter.unsignedShort (entryBuffer, 0x25);
+    headerPointer = Utility.unsignedShort (entryBuffer, 0x25);
 
     switch (storageType)
     {
@@ -68,16 +104,22 @@ class FileEntry extends CatalogEntry implements ProdosConstants
         int block = keyPtr;
         do
         {
-          dataBlocks.add (disk.getDiskAddress (block));
-          byte[] buffer = disk.readSector (block);
-          block = HexFormatter.unsignedShort (buffer, 2);
+          DiskAddress diskAddress = disk.getDiskAddress (block);
+          if (diskAddress == null)
+            break;
+          dataBlocks.add (diskAddress);
+          byte[] buffer = disk.readBlock (block);
+          block = Utility.unsignedShort (buffer, 2);
         } while (block > 0);
         break;
 
       case PASCAL_ON_PROFILE:
-        indexBlocks.add (disk.getDiskAddress (keyPtr));
-        System.out.println ("PASCAL on PROFILE: " + name);
-        // are these blocks guaranteed to be contiguous?
+        for (int i = keyPtr; i < disk.getTotalBlocks (); i++)
+        {
+          dataBlocks.add (disk.getDiskAddress (i));
+          parentDisk.setSectorType (i, parentDisk.dataSector);
+        }
+        //        System.out.println ("PASCAL on PROFILE: " + name);    // PDUCSD12.PO
         break;
 
       default:
@@ -85,27 +127,31 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void readForks ()
+  // ---------------------------------------------------------------------------------//
   {
     parentDisk.setSectorType (keyPtr, parentDisk.extendedKeySector);
     indexBlocks.add (disk.getDiskAddress (keyPtr));
 
-    byte[] buffer2 = disk.readSector (keyPtr);        // data fork and resource fork
+    byte[] buffer2 = disk.readBlock (keyPtr);        // data fork and resource fork
 
-    // read 2 mini entries (data fork / resource fork)
+    // read 2 mini entries (data fork & resource fork)
     for (int i = 0; i < 512; i += 256)
     {
       int storageType = buffer2[i] & 0x0F;
-      int keyBlock = HexFormatter.unsignedShort (buffer2, i + 1);
-      //      int eof = HexFormatter.intValue (buffer2[i + 3], buffer2[i + 4], buffer2[i + 5]);
+      int keyBlock = Utility.unsignedShort (buffer2, i + 1);
+      int eof = Utility.intValue (buffer2[i + 3], buffer2[i + 4], buffer2[i + 5]);
       addDataBlocks (storageType, keyBlock);
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private void addDataBlocks (int storageType, int keyPtr)
+  // ---------------------------------------------------------------------------------//
   {
     DiskAddress emptyDiskAddress = disk.getDiskAddress (0);
-    List<Integer> blocks = new ArrayList<Integer> ();
+    List<Integer> blocks = new ArrayList<> ();
 
     switch (storageType)
     {
@@ -143,9 +189,11 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private List<Integer> readIndex (int blockPtr)
+  // ---------------------------------------------------------------------------------//
   {
-    List<Integer> blocks = new ArrayList<Integer> (256);
+    List<Integer> blocks = new ArrayList<> (256);
 
     if (blockPtr == 0)                    // master index contains a zero
       for (int i = 0; i < 256; i++)
@@ -155,7 +203,7 @@ class FileEntry extends CatalogEntry implements ProdosConstants
       parentDisk.setSectorType (blockPtr, parentDisk.indexSector);
       indexBlocks.add (disk.getDiskAddress (blockPtr));
 
-      byte[] buffer = disk.readSector (blockPtr);
+      byte[] buffer = disk.readBlock (blockPtr);
       for (int i = 0; i < 256; i++)
       {
         int blockNo = (buffer[i] & 0xFF) | ((buffer[i + 0x100] & 0xFF) << 8);
@@ -166,20 +214,22 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return blocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   private List<Integer> readMasterIndex (int keyPtr)
+  // ---------------------------------------------------------------------------------//
   {
     masterIndexBlock = disk.getDiskAddress (keyPtr);
     parentDisk.setSectorType (keyPtr, parentDisk.masterIndexSector);
     indexBlocks.add (disk.getDiskAddress (keyPtr));
 
-    byte[] buffer = disk.readSector (keyPtr);                   // master index
+    byte[] buffer = disk.readBlock (keyPtr);                   // master index
 
     int highest = 0x80;
     while (highest-- > 0)                                       // decrement after test
       if (buffer[highest] != 0 || buffer[highest + 0x100] != 0)
         break;
 
-    List<Integer> blocks = new ArrayList<Integer> (highest + 1);
+    List<Integer> blocks = new ArrayList<> (highest + 1);
     for (int i = 0; i <= highest; i++)
     {
       int blockNo = (buffer[i] & 0xFF) | ((buffer[i + 256] & 0xFF) << 8);
@@ -189,7 +239,9 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return blocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   private boolean isValid (int blockNo)
+  // ---------------------------------------------------------------------------------//
   {
     if (false)
     {
@@ -201,8 +253,10 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return disk.isValidAddress (blockNo) && !parentDisk.isSectorFree (blockNo);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public DataSource getDataSource ()
+  // ---------------------------------------------------------------------------------//
   {
     if (file != null)
       return file;
@@ -223,11 +277,22 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     {
       switch (fileType)
       {
+        case FILE_TYPE_OVL:
+          if (endOfFile == 0x2000 && auxType == 0)
+          {
+            file = new OriginalHiResImage (name, exactBuffer, auxType);
+            break;
+          }
+          else if (endOfFile == 0x800 && "SELECTOR.LIST".equals (name))
+          {
+            file = new Selector (name, exactBuffer);
+            break;
+          }
+          // drop through
         case FILE_TYPE_BINARY:
         case FILE_TYPE_RELOCATABLE:
         case FILE_TYPE_SYS:
         case FILE_TYPE_BAT:
-        case FILE_TYPE_USER_DEFINED_1:
           if (SimpleText.isHTML (exactBuffer))
             file = new SimpleText (name, exactBuffer);
           else if (HiResImage.isGif (exactBuffer) || HiResImage.isPng (exactBuffer))
@@ -240,7 +305,9 @@ class FileEntry extends CatalogEntry implements ProdosConstants
             // I made up aux=99 to test it without stepping on aux==04
             file = new SHRPictureFile2 (name, exactBuffer, 0xC0, 99, endOfFile);
           else if (name.endsWith (".FNT") && FontFile.isFont (exactBuffer))
-            file = new FontFile (name, exactBuffer);
+            file = new FontFile (name, exactBuffer, auxType);
+          else if (name.endsWith (".FONT") && FontFile.isFont (exactBuffer))
+            file = new FontFile (name, exactBuffer, auxType);
           else if (ShapeTable.isShapeTable (exactBuffer))
             file = new ShapeTable (name, exactBuffer);
           else if (link != null)
@@ -253,14 +320,48 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           else if (name.endsWith (".PAC") || name.endsWith (".A2FC")
               || (endOfFile == 0x4000 && auxType == 0x2000))
             file = new DoubleHiResImage (name, exactBuffer);
+          else if (endOfFile == 0x4000 && auxType == 0x4000)
+            file = new DoubleHiResImage (name, exactBuffer);
+          else if (ExoBuffer.isExomizer (exactBuffer, auxType))
+          {
+            ExoBuffer exoBuffer = new ExoBuffer (exactBuffer);
+            byte[] outBuffer = exoBuffer.getExpandedBuffer ();
+
+            switch (outBuffer.length)
+            {
+              case 0x2000:
+                file = new OriginalHiResImage (name, outBuffer, 0x4000);
+                break;
+              case 0x4000:
+                file = new DoubleHiResImage (name, outBuffer);
+                break;
+              case 0x8000:
+                file =
+                    new SHRPictureFile2 (name, outBuffer, FILE_TYPE_PIC, 0x2000, 0x8000);
+                break;
+              default:
+                file = new AssemblerProgram (name, exactBuffer, auxType);
+            }
+          }
           else if (oneOf (endOfFile, 0x1FF8, 0x1FFF, 0x2000, 0x4000)
-              && oneOf (auxType, 0x1FFF, 0x2000, 0x4000))
+              && oneOf (auxType, 0x1FFF, 0x2000, 0x4000, 0x6000))
             file = new OriginalHiResImage (name, exactBuffer, auxType);
-          else if (endOfFile == 38400 && name.startsWith ("LVL."))
+          else if (endOfFile == 0x9600 && name.startsWith ("LVL."))
             file = new LodeRunner (name, exactBuffer);
-          else if (auxType == 0x1000 && endOfFile == 0x400
-              && CharacterRom.isRom (exactBuffer))
+          else if (auxType == 0x1000 && CharacterRom.isRom (exactBuffer))
             file = new CharacterRom (name, exactBuffer);
+          else if (auxType == 0 && endOfFile == 0x8000)
+          {
+            // see gs basic disk, one of the four pictures looks ok
+            file = new SHRPictureFile2 (name, exactBuffer, 0xC1, 0, endOfFile);
+          }
+          //  else if (name.endsWith (".PIC"))          // 0091 X-BASIC../../XBASIC.PIC
+          //    file = new SHRPictureFile2 (name, exactBuffer, fileType, auxType, endOfFile);
+          else if ((name.equals ("DOS.3.3") || name.equals ("DDOS.3.3"))
+              && endOfFile == 0x2800 && DosMasterFile.isDos33 (parentDisk, exactBuffer))
+          {
+            file = new DosMasterFile (name, exactBuffer);
+          }
           else
           {
             file = new AssemblerProgram (name, exactBuffer, auxType);
@@ -274,6 +375,8 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           assert auxType == 0;                        // auxType > 0 handled above
           if (name.endsWith (".S"))
             file = new MerlinSource (name, exactBuffer, auxType, endOfFile);
+          else if (name.endsWith ("PLA"))
+            file = new SimpleText (name, exactBuffer);
           else if (name.endsWith (".GIF") && HiResImage.isGif (exactBuffer))
             file = new OriginalHiResImage (name, exactBuffer, auxType);
           else
@@ -281,7 +384,15 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           break;
 
         case FILE_TYPE_APPLESOFT_BASIC:
-          file = new BasicProgram (name, exactBuffer);
+          file = new ApplesoftBasicProgram (name, exactBuffer);
+          break;
+
+        case FILE_TYPE_GS_BASIC:
+          // 0132 816-Paint.po has GSB files that crash because they are palettes
+          if (buffer[0] == 4 && buffer[1] == 16)      // complete guess
+            file = new BasicProgramGS (name, exactBuffer);
+          else
+            file = new DefaultAppleFile (name, exactBuffer);
           break;
 
         case FILE_TYPE_INTEGER_BASIC:
@@ -289,7 +400,7 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           break;
 
         case FILE_TYPE_DIRECTORY:
-          VolumeDirectoryHeader vdh = parentDisk.vdh;
+          VolumeDirectoryHeader vdh = parentDisk.getVolumeDirectoryHeader ();
           file = new ProdosDirectory (parentDisk, name, buffer, vdh.totalBlocks,
               vdh.freeBlocks, vdh.usedBlocks);
           break;
@@ -329,7 +440,7 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           break;
 
         case FILE_TYPE_IIGS_APPLICATION:
-          file = new AssemblerProgram (name, buffer, auxType);
+          file = new ObjectModule (name, exactBuffer, auxType);
           break;
 
         case FILE_TYPE_IIGS_DEVICE_DRIVER:
@@ -343,8 +454,14 @@ class FileEntry extends CatalogEntry implements ProdosConstants
         case FILE_TYPE_PNT:
           if (auxType == 2)
             file = new SHRPictureFile1 (name, exactBuffer, fileType, auxType, endOfFile);
+          else if (endOfFile < 0x222)
+            file = new DefaultAppleFile (name, exactBuffer);
           else
             file = new SHRPictureFile2 (name, exactBuffer, fileType, auxType, endOfFile);
+          break;
+
+        case FILE_TYPE_ANI:
+          file = new SHRPictureFile2 (name, exactBuffer, fileType, auxType, endOfFile);
           break;
 
         case FILE_TYPE_PIC:
@@ -352,13 +469,35 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           break;
 
         case FILE_TYPE_FOT:
-          if (auxType == 0x8066)        // Fadden
+          if (auxType == HiResImage.FADDEN_AUX)
             file = new FaddenHiResImage (name, exactBuffer, fileType, auxType, endOfFile);
-          else
+          else if (auxType < 0x4000)
           {
-            System.out.println ("Unwritten FOT: " + name);
+            file = new OriginalHiResImage (name, exactBuffer, 0x2000);
+            System.out.printf ("FOT %02X%n", exactBuffer[121]);
+          }
+          else if (auxType == 0x4000)
+          {
+            // packed hi-res
+            System.out.println ("FOT - packed hi res");
             file = new DefaultAppleFile (name, exactBuffer);
           }
+          else if (auxType == 0x4001)
+          {
+            // packed double hi-res
+            System.out.println ("FOT - double hi res");
+            file = new DefaultAppleFile (name, exactBuffer);
+          }
+          else
+          {
+            file = new DefaultAppleFile (name, exactBuffer);
+            //   file =
+            //     new OriginalHiResImage (name, exactBuffer, fileType, auxType, endOfFile);
+          }
+          break;
+
+        case FILE_TYPE_FNT:
+          file = new FontFile (name, exactBuffer, auxType);
           break;
 
         case FILE_TYPE_FONT:
@@ -373,17 +512,31 @@ class FileEntry extends CatalogEntry implements ProdosConstants
           file = new FileSystemTranslator (name, exactBuffer);
           break;
 
-        case FILE_TYPE_FINDER:
         case FILE_TYPE_PASCAL_VOLUME:
+          file = new PascalArea (name, exactBuffer);
+          break;
+
         case FILE_TYPE_GEO:
         case FILE_TYPE_LDF:
-        case FILE_TYPE_ANI:
         case FILE_TYPE_PAL:
+        case FILE_TYPE_IIGS_OBJECT:
           file = new DefaultAppleFile (name, exactBuffer);
           break;
 
+        case FILE_TYPE_NON:
+          if (name.endsWith (".TIFF") && HiResImage.isTiff (exactBuffer))
+            file = new OriginalHiResImage (name, exactBuffer, auxType);
+          else
+            file = new DefaultAppleFile (name, exactBuffer);
+          break;
+
+        case FILE_TYPE_FINDER:
+          file = new FinderData (name, exactBuffer);
+          break;
+
         default:
-          System.out.format ("%s - Unknown Prodos file type : %02X%n", name, fileType);
+          // System.out.format ("%02X  %s  %s - Unknown Prodos file type%n",
+          // fileType, fileTypes[fileType], name);
           file = new DefaultAppleFile (name, exactBuffer);
       }
     }
@@ -395,7 +548,9 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return file;
   }
 
+  // ---------------------------------------------------------------------------------//
   private boolean oneOf (int val, int... values)
+  // ---------------------------------------------------------------------------------//
   {
     for (int value : values)
       if (val == value)
@@ -403,27 +558,11 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return false;
   }
 
-  private byte[] getExactBuffer (byte[] buffer)
-  {
-    byte[] exactBuffer;
-    if (buffer.length < endOfFile)
-    {
-      exactBuffer = new byte[endOfFile];
-      System.arraycopy (buffer, 0, exactBuffer, 0, buffer.length);
-    }
-    else if (buffer.length == endOfFile || endOfFile == 512)    // 512 seems like crap
-      exactBuffer = buffer;
-    else
-    {
-      exactBuffer = new byte[endOfFile];
-      System.arraycopy (buffer, 0, exactBuffer, 0, endOfFile);
-    }
-    return exactBuffer;
-  }
-
+  // ---------------------------------------------------------------------------------//
   private DataSource getRandomAccessTextFile ()
+  // ---------------------------------------------------------------------------------//
   {
-    // Text files with aux (reclen) > 0 are random access, possibly with 
+    // Text files with aux (reclen) > 0 are random access, possibly with
     // non-contiguous records, so they need to be handled differently
 
     switch (storageType)
@@ -440,24 +579,25 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private DataSource getTreeTextFile ()
+  // ---------------------------------------------------------------------------------//
   {
-    List<TextBuffer> buffers = new ArrayList<TextBuffer> ();
-    List<DiskAddress> addresses = new ArrayList<DiskAddress> ();
+    List<TextBuffer> buffers = new ArrayList<> ();
+    List<DiskAddress> addresses = new ArrayList<> ();
     int logicalBlock = 0;
 
-    byte[] mainIndexBuffer = disk.readSector (keyPtr);
+    byte[] mainIndexBuffer = disk.readBlock (keyPtr);
     for (int i = 0; i < 256; i++)
     {
-      int indexBlock =
-          HexFormatter.intValue (mainIndexBuffer[i], mainIndexBuffer[i + 256]);
+      int indexBlock = Utility.intValue (mainIndexBuffer[i], mainIndexBuffer[i + 256]);
       if (indexBlock > 0)
         logicalBlock = readIndexBlock (indexBlock, addresses, buffers, logicalBlock);
       else
       {
         if (addresses.size () > 0)
         {
-          byte[] tempBuffer = disk.readSectors (addresses);
+          byte[] tempBuffer = disk.readBlocks (addresses);
           buffers.add (
               new TextBuffer (tempBuffer, auxType, logicalBlock - addresses.size ()));
           addresses.clear ();
@@ -471,10 +611,12 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return new TextFile (name, buffers, auxType, endOfFile);
   }
 
+  // ---------------------------------------------------------------------------------//
   private DataSource getSaplingTextFile ()
+  // ---------------------------------------------------------------------------------//
   {
-    List<TextBuffer> buffers = new ArrayList<TextBuffer> ();
-    List<DiskAddress> addresses = new ArrayList<DiskAddress> ();
+    List<TextBuffer> buffers = new ArrayList<> ();
+    List<DiskAddress> addresses = new ArrayList<> ();
     readIndexBlock (keyPtr, addresses, buffers, 0);
 
     if (buffers.size () == 1 && name.endsWith (".S"))
@@ -483,7 +625,9 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return new TextFile (name, buffers, auxType, endOfFile);
   }
 
+  // ---------------------------------------------------------------------------------//
   private DataSource getSeedlingTextFile ()
+  // ---------------------------------------------------------------------------------//
   {
     byte[] buffer = getBuffer ();
     if (endOfFile < buffer.length)
@@ -499,31 +643,33 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     return new TextFile (name, buffer, auxType, endOfFile);
   }
 
+  // ---------------------------------------------------------------------------------//
   private byte[] getBuffer ()
+  // ---------------------------------------------------------------------------------//
   {
     switch (storageType)
     {
       case SEEDLING:
       case SAPLING:
       case TREE:
-        return disk.readSectors (dataBlocks);
+        return disk.readBlocks (dataBlocks);
 
       case SUBDIRECTORY:
         byte[] fullBuffer = new byte[dataBlocks.size () * BLOCK_ENTRY_SIZE];
         int offset = 0;
         for (DiskAddress da : dataBlocks)
         {
-          byte[] buffer = disk.readSector (da);
+          byte[] buffer = disk.readBlock (da);
           System.arraycopy (buffer, 4, fullBuffer, offset, BLOCK_ENTRY_SIZE);
           offset += BLOCK_ENTRY_SIZE;
         }
         return fullBuffer;
 
       case GSOS_EXTENDED_FILE:
-        return disk.readSectors (dataBlocks);   // data and resource forks concatenated
+        return disk.readBlocks (dataBlocks);   // data and resource forks concatenated
 
       case PASCAL_ON_PROFILE:
-        return disk.readSectors (dataBlocks);
+        return disk.readBlocks (dataBlocks);
 
       default:
         System.out.println ("Unknown storage type in getBuffer : " + storageType);
@@ -531,41 +677,70 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     }
   }
 
+  // ---------------------------------------------------------------------------------//
+  private byte[] getExactBuffer (byte[] buffer)
+  // ---------------------------------------------------------------------------------//
+  {
+    byte[] exactBuffer;
+    if (buffer.length < endOfFile)
+    {
+      exactBuffer = new byte[endOfFile];
+      System.arraycopy (buffer, 0, exactBuffer, 0, buffer.length);
+    }
+    // 512 seems like crap
+    else if (buffer.length == endOfFile || endOfFile == 512 || endOfFile == 0)
+      exactBuffer = buffer;
+    else
+    {
+      exactBuffer = new byte[endOfFile];
+      System.arraycopy (buffer, 0, exactBuffer, 0, endOfFile);
+    }
+    return exactBuffer;
+  }
+
+  // ---------------------------------------------------------------------------------//
   private int readIndexBlock (int indexBlock, List<DiskAddress> addresses,
       List<TextBuffer> buffers, int logicalBlock)
+  // ---------------------------------------------------------------------------------//
   {
-    byte[] indexBuffer = disk.readSector (indexBlock);
+    byte[] indexBuffer = disk.readBlock (indexBlock);
     for (int j = 0; j < 256; j++)
     {
-      int block = HexFormatter.intValue (indexBuffer[j], indexBuffer[j + 256]);
+      int block = Utility.intValue (indexBuffer[j], indexBuffer[j + 256]);
       if (block > 0)
         addresses.add (disk.getDiskAddress (block));
       else if (addresses.size () > 0)
       {
-        byte[] tempBuffer = disk.readSectors (addresses);
+        byte[] tempBuffer = disk.readBlocks (addresses);
         buffers
             .add (new TextBuffer (tempBuffer, auxType, logicalBlock - addresses.size ()));
         addresses.clear ();
       }
       logicalBlock++;
     }
+
     return logicalBlock;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public List<DiskAddress> getSectors ()
+  // ---------------------------------------------------------------------------------//
   {
-    List<DiskAddress> sectors = new ArrayList<DiskAddress> ();
+    List<DiskAddress> sectors = new ArrayList<> ();
     sectors.add (catalogBlock);
     if (masterIndexBlock != null)
       sectors.add (masterIndexBlock);
     sectors.addAll (indexBlocks);
     sectors.addAll (dataBlocks);
+
     return sectors;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public boolean contains (DiskAddress da)
+  // ---------------------------------------------------------------------------------//
   {
     if (da == null)
       return false;
@@ -577,20 +752,26 @@ class FileEntry extends CatalogEntry implements ProdosConstants
     for (DiskAddress block : dataBlocks)
       if (da.matches (block))
         return true;
+
     return false;
   }
 
-  // called from ProdosDisk.processDirectoryBlock
+  // called from ProdosDisk.processDirectoryBlock, used to link DoubleHires image files
+  // ---------------------------------------------------------------------------------//
   void link (FileEntry fileEntry)
+  // ---------------------------------------------------------------------------------//
   {
     this.link = fileEntry;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String toString ()
+  // ---------------------------------------------------------------------------------//
   {
     if (ProdosConstants.fileTypes[fileType].equals ("DIR"))
       return name;
+
     String locked = (access == 0x00) ? "*" : " ";
 
     if (true)
@@ -599,6 +780,7 @@ class FileEntry extends CatalogEntry implements ProdosConstants
 
     String timeC = created == null ? "" : parentDisk.df.format (created.getTime ());
     String timeF = modified == null ? "" : parentDisk.df.format (modified.getTime ());
+
     return String.format ("%s %s%-30s %3d %,10d %15s %15s",
         ProdosConstants.fileTypes[fileType], locked, parentDirectory.name + "/" + name,
         blocksUsed, endOfFile, timeC, timeF);

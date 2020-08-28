@@ -12,7 +12,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.util.prefs.Preferences;
 
 import javax.swing.JComponent;
 import javax.swing.JPanel;
@@ -25,8 +24,10 @@ import com.bytezone.diskbrowser.disk.FormattedDisk;
 import com.bytezone.diskbrowser.gui.RedoHandler.RedoEvent;
 import com.bytezone.diskbrowser.gui.RedoHandler.RedoListener;
 
+// -----------------------------------------------------------------------------------//
 class DiskLayoutPanel extends JPanel
     implements DiskSelectionListener, FileSelectionListener, RedoListener
+// -----------------------------------------------------------------------------------//
 {
   private static final int SIZE = 15;             // basic unit of a display block
 
@@ -37,7 +38,9 @@ class DiskLayoutPanel extends JPanel
   private final JScrollPane sp;
   private LayoutDetails layout;
 
-  public DiskLayoutPanel (MenuHandler mh, Preferences prefs)
+  // ---------------------------------------------------------------------------------//
+  public DiskLayoutPanel ()
+  // ---------------------------------------------------------------------------------//
   {
     super (new BorderLayout ());
 
@@ -50,7 +53,7 @@ class DiskLayoutPanel extends JPanel
 
     sp = new JScrollPane (diskLayoutImage, VERTICAL_SCROLLBAR_ALWAYS,
         HORIZONTAL_SCROLLBAR_ALWAYS);
-    sp.setBackground (Color.WHITE);
+    sp.getViewport ().setBackground (Color.WHITE);
     sp.setColumnHeaderView (horizontalRuler);
     sp.setRowHeaderView (verticalRuler);
     sp.setBorder (null);
@@ -64,7 +67,9 @@ class DiskLayoutPanel extends JPanel
     add (legendPanel, BorderLayout.SOUTH);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setDisk (final FormattedDisk disk)
+  // ---------------------------------------------------------------------------------//
   {
     layout = new LayoutDetails (disk);
     diskLayoutImage.setDisk (disk, layout);
@@ -76,7 +81,7 @@ class DiskLayoutPanel extends JPanel
     sp.setViewportView (diskLayoutImage);
 
     setLayout (new BorderLayout ());
-    if (disk.getGridLayout ().height == 35)
+    if (disk.getGridLayout ().height == 35)       // what about 48?
     {
       add (sp, BorderLayout.NORTH);
       add (legendPanel, BorderLayout.CENTER);
@@ -106,49 +111,65 @@ class DiskLayoutPanel extends JPanel
     repaint ();
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setHex (boolean hex)
+  // ---------------------------------------------------------------------------------//
   {
     verticalRuler.setHex (hex);
     horizontalRuler.setHex (hex);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setBlock (boolean block)
+  // ---------------------------------------------------------------------------------//
   {
     verticalRuler.setTrackMode (block);
     horizontalRuler.setTrackMode (block);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void setFree (boolean free)
+  // ---------------------------------------------------------------------------------//
   {
     diskLayoutImage.setShowFreeSectors (free);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void addSectorSelectionListener (SectorSelectionListener listener)
+  // ---------------------------------------------------------------------------------//
   {
     diskLayoutImage.addSectorSelectionListener (listener);
   }
 
+  // ---------------------------------------------------------------------------------//
   public void removeSectorSelectionListener (SectorSelectionListener listener)
+  // ---------------------------------------------------------------------------------//
   {
     diskLayoutImage.removeSectorSelectionListener (listener);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void diskSelected (DiskSelectedEvent event)
+  // ---------------------------------------------------------------------------------//
   {
     setDisk (event.getFormattedDisk ());
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public void fileSelected (FileSelectedEvent event)
+  // ---------------------------------------------------------------------------------//
   {
     // This can happen if a file is selected from a dual-dos disk
-    checkCorrectDisk (event.file.getFormattedDisk ());
+    checkCorrectDisk (event.appleFileSource.getFormattedDisk ());
 
-    diskLayoutImage.setSelection (event.file.getSectors ());
+    diskLayoutImage.setSelection (event.appleFileSource.getSectors ());
   }
 
+  // ---------------------------------------------------------------------------------//
   class LayoutDetails
+  // ---------------------------------------------------------------------------------//
   {
     Dimension block;
     Dimension grid;
@@ -162,8 +183,8 @@ class DiskLayoutPanel extends JPanel
 
     public Rectangle getLocation (DiskAddress da)
     {
-      int y = da.getBlock () / grid.width;
-      int x = da.getBlock () % grid.width;
+      int y = da.getBlockNo () / grid.width;
+      int x = da.getBlockNo () % grid.width;
       Rectangle r =
           new Rectangle (x * block.width, y * block.height, block.width, block.height);
       return r;
@@ -179,7 +200,9 @@ class DiskLayoutPanel extends JPanel
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   class Corner extends JComponent
+  // ---------------------------------------------------------------------------------//
   {
     Color backgroundColor = Color.WHITE;
     boolean showHex = true;

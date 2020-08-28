@@ -8,20 +8,24 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.bytezone.common.Utility;
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
-public class MazeGridV5 extends AbstractFile
+// -----------------------------------------------------------------------------------//
+class MazeGridV5 extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
   private final MessageBlock messageBlock;
-  List<MazeGrid> grids = new ArrayList<MazeGrid> ();
+  List<MazeGrid> grids = new ArrayList<> ();
   int minX = 9999;
   int minY = 9999;
   int maxX = 0;
   int maxY = 0;
 
-  public MazeGridV5 (String name, byte[] buffer, MessageBlock messageBlock)
+  // ---------------------------------------------------------------------------------//
+  MazeGridV5 (String name, byte[] buffer, MessageBlock messageBlock)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -45,8 +49,10 @@ public class MazeGridV5 extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public BufferedImage getImage ()
+  // ---------------------------------------------------------------------------------//
   {
     Dimension cellSize = new Dimension (22, 22);
     int fudge = 30;
@@ -80,7 +86,9 @@ public class MazeGridV5 extends AbstractFile
     return image;
   }
 
+  // ---------------------------------------------------------------------------------//
   private MazeCell getLayout (int gridNo, int row, int column)
+  // ---------------------------------------------------------------------------------//
   {
     MazeAddress address = new MazeAddress (0, row, column);
     MazeCell cell = new MazeCell (address);
@@ -103,8 +111,10 @@ public class MazeGridV5 extends AbstractFile
     return cell;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getHexDump ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder (super.getHexDump ());
 
@@ -127,7 +137,7 @@ public class MazeGridV5 extends AbstractFile
     offset = 0x320;
     for (int i = 0; i < 15; i++)
     {
-      text.append (Utility.toHex (buffer, offset + i * 10, 10));
+      text.append (HexFormatter.format (buffer, offset + i * 10, 10));
       text.append ("\n");
     }
     text.append ("\n");
@@ -135,7 +145,7 @@ public class MazeGridV5 extends AbstractFile
     offset = 0x400;
     for (int i = 0; i < 5; i++)
     {
-      text.append (Utility.toHex (buffer, offset + i * 64, 64));
+      text.append (HexFormatter.format (buffer, offset + i * 64, 64));
       text.append ("\n\n");
     }
 
@@ -160,7 +170,7 @@ public class MazeGridV5 extends AbstractFile
     offset = 0x5F0;
     for (int i = 0; i < 7; i++)
     {
-      text.append (Utility.toHex (buffer, offset + i * 64, 64));
+      text.append (HexFormatter.format (buffer, offset + i * 64, 64));
       text.append ("\n\n");
     }
 
@@ -187,7 +197,9 @@ public class MazeGridV5 extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private class MazeGrid
+  // ---------------------------------------------------------------------------------//
   {
     MazeCell[][] grid;
     int xOffset;

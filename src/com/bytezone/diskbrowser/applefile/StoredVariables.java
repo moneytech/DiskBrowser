@@ -1,16 +1,23 @@
 package com.bytezone.diskbrowser.applefile;
 
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 public class StoredVariables extends AbstractFile
+// -----------------------------------------------------------------------------------//
 {
+  // ---------------------------------------------------------------------------------//
   public StoredVariables (String name, byte[] buffer)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ();
     String strValue = null;
@@ -19,10 +26,10 @@ public class StoredVariables extends AbstractFile
     int strPtr = buffer.length;
 
     text.append ("File length  : " + HexFormatter.format4 (buffer.length));
-    int totalLength = HexFormatter.intValue (buffer[0], buffer[1]);
+    int totalLength = Utility.intValue (buffer[0], buffer[1]);
     text.append ("\nTotal length : " + HexFormatter.format4 (totalLength));
 
-    int varLength = HexFormatter.intValue (buffer[2], buffer[3]);
+    int varLength = Utility.intValue (buffer[2], buffer[3]);
     text.append ("\nVar length   : " + HexFormatter.format4 (varLength));
     text.append ("\n\n");
 
@@ -44,7 +51,7 @@ public class StoredVariables extends AbstractFile
       }
       else if (suffix == '%')
       {
-        intValue = HexFormatter.intValue (buffer[ptr + 3], buffer[ptr + 2]);
+        intValue = Utility.intValue (buffer[ptr + 3], buffer[ptr + 2]);
         if ((buffer[ptr + 2] & 0x80) > 0)
           intValue -= 65536;
         text.append (" = " + intValue);
@@ -69,7 +76,9 @@ public class StoredVariables extends AbstractFile
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getVariableName (byte b1, byte b2)
+  // ---------------------------------------------------------------------------------//
   {
     char c1, c2, suffix;
 
@@ -102,7 +111,9 @@ public class StoredVariables extends AbstractFile
     return variableName.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String getDimensionText (int[] values)
+  // ---------------------------------------------------------------------------------//
   {
     StringBuilder text = new StringBuilder ("(");
     for (int i = 0; i < values.length; i++)
@@ -114,20 +125,22 @@ public class StoredVariables extends AbstractFile
     return text.append (')').toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private void listArrays (StringBuilder text, int ptr, int totalLength, int strPtr)
+  // ---------------------------------------------------------------------------------//
   {
     while (ptr < totalLength + 5)
     {
       String variableName = getVariableName (buffer[ptr], buffer[ptr + 1]);
       text.append ("\n");
-      int offset = HexFormatter.intValue (buffer[ptr + 2], buffer[ptr + 3]);
+      int offset = Utility.intValue (buffer[ptr + 2], buffer[ptr + 3]);
       int dimensions = buffer[ptr + 4] & 0xFF;
       int[] dimensionSizes = new int[dimensions];
       int totalElements = 0;
       for (int i = 0; i < dimensions; i++)
       {
         int p = i * 2 + 5 + ptr;
-        int elements = HexFormatter.intValue (buffer[p + 1], buffer[p]);
+        int elements = Utility.intValue (buffer[p + 1], buffer[p]);
         dimensionSizes[dimensions - i - 1] = elements - 1;
         if (totalElements == 0)
           totalElements = elements;
@@ -147,7 +160,7 @@ public class StoredVariables extends AbstractFile
         text.append (variableName + " " + getDimensionText (values) + " = ");
         if (elementSize == 2)
         {
-          int intValue = HexFormatter.intValue (buffer[p + 1], buffer[p]);
+          int intValue = Utility.intValue (buffer[p + 1], buffer[p]);
           if ((buffer[p] & 0x80) > 0)
             intValue -= 65536;
           text.append (intValue + "\n");
@@ -181,7 +194,9 @@ public class StoredVariables extends AbstractFile
     }
   }
 
+  // ---------------------------------------------------------------------------------//
   private boolean hasValue (int p)
+  // ---------------------------------------------------------------------------------//
   {
     for (int i = 0; i < 5; i++)
       if (buffer[p + i] != 0)
@@ -189,16 +204,18 @@ public class StoredVariables extends AbstractFile
     return false;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getHexDump ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuffer text = new StringBuffer ();
 
     text.append ("File length  : " + HexFormatter.format4 (buffer.length));
-    int totalLength = HexFormatter.intValue (buffer[0], buffer[1]);
+    int totalLength = Utility.intValue (buffer[0], buffer[1]);
     text.append ("\nTotal length : " + HexFormatter.format4 (totalLength));
 
-    int varLength = HexFormatter.intValue (buffer[2], buffer[3]);
+    int varLength = Utility.intValue (buffer[2], buffer[3]);
     text.append ("\nVar length   : " + HexFormatter.format4 (varLength));
 
     int unknown = buffer[4] & 0xFF;
@@ -215,14 +232,14 @@ public class StoredVariables extends AbstractFile
     text.append ("\nArrays : \n\n");
     while (ptr < totalLength + 5)
     {
-      int offset = HexFormatter.intValue (buffer[ptr + 2], buffer[ptr + 3]);
+      int offset = Utility.intValue (buffer[ptr + 2], buffer[ptr + 3]);
       int dimensions = buffer[ptr + 4] & 0xFF;
       int[] dimensionSizes = new int[dimensions];
       int totalElements = 0;
       for (int i = 0; i < dimensions; i++)
       {
         int p = i * 2 + 5 + ptr;
-        int elements = HexFormatter.intValue (buffer[p + 1], buffer[p]);
+        int elements = Utility.intValue (buffer[p + 1], buffer[p]);
         dimensionSizes[dimensions - i - 1] = elements;
         if (totalElements == 0)
           totalElements = elements;

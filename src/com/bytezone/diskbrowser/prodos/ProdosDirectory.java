@@ -1,24 +1,32 @@
 package com.bytezone.diskbrowser.prodos;
 
+import java.text.SimpleDateFormat;
 import java.util.GregorianCalendar;
 
 import com.bytezone.diskbrowser.applefile.AbstractFile;
 import com.bytezone.diskbrowser.disk.FormattedDisk;
 import com.bytezone.diskbrowser.utilities.HexFormatter;
+import com.bytezone.diskbrowser.utilities.Utility;
 
+// -----------------------------------------------------------------------------------//
 class ProdosDirectory extends AbstractFile implements ProdosConstants
+// -----------------------------------------------------------------------------------//
 {
   private static final String NO_DATE = "<NO DATE>";
   private static final String newLine = String.format ("%n");
   private static final String newLine2 = newLine + newLine;
+  private static final SimpleDateFormat sdf = new SimpleDateFormat ("d-MMM-yy");
+  private static final SimpleDateFormat stf = new SimpleDateFormat ("H:mm");
 
   private final ProdosDisk parentFD;
   private final int totalBlocks;
   private final int freeBlocks;
   private final int usedBlocks;
 
-  public ProdosDirectory (FormattedDisk parent, String name, byte[] buffer,
-      int totalBlocks, int freeBlocks, int usedBlocks)
+  // ---------------------------------------------------------------------------------//
+  ProdosDirectory (FormattedDisk parent, String name, byte[] buffer, int totalBlocks,
+      int freeBlocks, int usedBlocks)
+  // ---------------------------------------------------------------------------------//
   {
     super (name, buffer);
 
@@ -28,8 +36,10 @@ class ProdosDirectory extends AbstractFile implements ProdosConstants
     this.usedBlocks = usedBlocks;
   }
 
+  // ---------------------------------------------------------------------------------//
   @Override
   public String getText ()
+  // ---------------------------------------------------------------------------------//
   {
     StringBuffer text = new StringBuffer ();
     text.append ("Disk : " + parentFD.getDisplayPath () + newLine2);
@@ -61,26 +71,24 @@ class ProdosDirectory extends AbstractFile implements ProdosConstants
         case ProdosConstants.GSOS_EXTENDED_FILE:
         case ProdosConstants.SUBDIRECTORY:
           int type = buffer[i + 16] & 0xFF;
-          int blocks = HexFormatter.intValue (buffer[i + 19], buffer[i + 20]);
+          int blocks = Utility.intValue (buffer[i + 19], buffer[i + 20]);
 
           GregorianCalendar created = HexFormatter.getAppleDate (buffer, i + 24);
           String dateC = created == null ? NO_DATE
-              : parentFD.sdf.format (created.getTime ()).toUpperCase ().replace (".", "");
-          String timeC = created == null ? "" : parentFD.stf.format (created.getTime ());
+              : sdf.format (created.getTime ()).toUpperCase ().replace (".", "");
+          String timeC = created == null ? "" : stf.format (created.getTime ());
           GregorianCalendar modified = HexFormatter.getAppleDate (buffer, i + 33);
-          String dateM = modified == null ? NO_DATE : parentFD.sdf
-              .format (modified.getTime ()).toUpperCase ().replace (".", "");
-          String timeM =
-              modified == null ? "" : parentFD.stf.format (modified.getTime ());
-          int eof =
-              HexFormatter.intValue (buffer[i + 21], buffer[i + 22], buffer[i + 23]);
+          String dateM = modified == null ? NO_DATE
+              : sdf.format (modified.getTime ()).toUpperCase ().replace (".", "");
+          String timeM = modified == null ? "" : stf.format (modified.getTime ());
+          int eof = Utility.intValue (buffer[i + 21], buffer[i + 22], buffer[i + 23]);
           int fileType = buffer[i + 16] & 0xFF;
           locked = (buffer[i + 30] & 0xE0) == 0xE0 ? " " : "*";
 
           switch (fileType)
           {
             case FILE_TYPE_TEXT:
-              int aux = HexFormatter.intValue (buffer[i + 31], buffer[i + 32]);
+              int aux = Utility.intValue (buffer[i + 31], buffer[i + 32]);
               subType = String.format ("R=%5d", aux);
               break;
 
@@ -88,12 +96,12 @@ class ProdosDirectory extends AbstractFile implements ProdosConstants
             case FILE_TYPE_PNT:
             case FILE_TYPE_PIC:
             case FILE_TYPE_FOT:
-              aux = HexFormatter.intValue (buffer[i + 31], buffer[i + 32]);
+              aux = Utility.intValue (buffer[i + 31], buffer[i + 32]);
               subType = String.format ("A=$%4X", aux);
               break;
 
             case FILE_TYPE_AWP:
-              aux = HexFormatter.intValue (buffer[i + 32], buffer[i + 31]); // backwards!
+              aux = Utility.intValue (buffer[i + 32], buffer[i + 31]); // backwards!
               if (aux != 0)
                 filename = convert (filename, aux);
               break;
@@ -117,7 +125,9 @@ class ProdosDirectory extends AbstractFile implements ProdosConstants
     return text.toString ();
   }
 
+  // ---------------------------------------------------------------------------------//
   private String convert (String name, int flags)
+  // ---------------------------------------------------------------------------------//
   {
     char[] newName = name.toCharArray ();
     for (int i = 0, weight = 0x8000; i < newName.length; i++, weight >>>= 1)
